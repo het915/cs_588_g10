@@ -1,3 +1,4 @@
+#smart_extract.sh before build
 password:
 gem_ros2
 

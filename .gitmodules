@@ -4,3 +4,12 @@
 [submodule "src/hardware_drivers/as_drivers/astuff_sensor_msgs"]
 	path = src/hardware_drivers/as_drivers/astuff_sensor_msgs
 	url = https://github.com/astuff/astuff_sensor_msgs.git
+[submodule "src/hardware_drivers/as_drivers/pacmod2"]
+	path = src/hardware_drivers/as_drivers/pacmod2
+	url = https://github.com/astuff/pacmod2.git
+[submodule "src/hardware_drivers/as_drivers/pacmod2_game_control"]
+	path = src/hardware_drivers/as_drivers/pacmod2_game_control
+	url = https://github.com/astuff/pacmod2_game_control.git
+[submodule "src/hardware_drivers/3rd_drivers/smartmicro_ros2_radars"]
+	path = src/hardware_drivers/3rd_drivers/smartmicro_ros2_radars
+	url = https://github.com/smartmicro/smartmicro_ros2_radars.git
