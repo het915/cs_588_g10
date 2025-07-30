@@ -1,0 +1,38 @@
+/clicked_point
+/initialpose
+/livox/imu
+/livox/lidar
+/move_base_simple/goal
+/parameter_events
+/rosout
+/tf
+/tf_static
+
+
+
+
+/livox_lidar_publisher:
+  cmdline_input_bd_code
+  data_src
+  frame_id
+  lvx_file_path
+  multi_topic
+  output_data_type
+  publish_freq
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  use_sim_time
+  user_config_path
+  xfer_format
+/rviz:
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  tf_buffer_cache_time_ms
+  use_sim_time
+
+
+

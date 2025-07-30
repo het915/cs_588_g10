@@ -1,0 +1,6 @@
+[submodule "src/hardware_drivers/as_drivers/pacmod2_msgs"]
+	path = src/hardware_drivers/as_drivers/pacmod2_msgs
+	url = https://github.com/astuff/pacmod2_msgs.git
+[submodule "src/hardware_drivers/as_drivers/astuff_sensor_msgs"]
+	path = src/hardware_drivers/as_drivers/astuff_sensor_msgs
+	url = https://github.com/astuff/astuff_sensor_msgs.git
