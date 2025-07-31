@@ -13,3 +13,6 @@
 [submodule "src/hardware_drivers/3rd_drivers/smartmicro_ros2_radars"]
 	path = src/hardware_drivers/3rd_drivers/smartmicro_ros2_radars
 	url = https://github.com/smartmicro/smartmicro_ros2_radars.git
+[submodule "src/hardware_drivers/as_drivers/ssc_joystick"]
+	path = src/hardware_drivers/as_drivers/ssc_joystick
+	url = https://github.com/astuff/ssc_joystick.git

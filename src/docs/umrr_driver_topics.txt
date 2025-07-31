@@ -1,3 +1,0 @@
-/parameter_events
-/rosout
-/smart_radar/targets_0

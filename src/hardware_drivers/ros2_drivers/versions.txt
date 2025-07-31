@@ -1,4 +1,0 @@
-rviz_2d_overlay_plugins v1.2.1   for ROS2
-https://github.com/teamspatzenhirn/rviz_2d_overlay_plugins
-
-
