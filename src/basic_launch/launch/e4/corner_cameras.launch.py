@@ -15,28 +15,28 @@ def generate_launch_description():
     # launch fl camera sensor
     camera_fl_launch = IncludeLaunchDescription(        
         PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory('lucid_vision_driver'), 'launch'),
+            get_package_share_directory('basic_launch'), 'launch', 'e4' ),
             '/camera_fl.launch.py'])
     )
 
     # launch fr camera sensor
     camera_fr_launch = IncludeLaunchDescription(        
         PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory('lucid_vision_driver'), 'launch'),
+            get_package_share_directory('basic_launch'), 'launch', 'e4' ),
             '/camera_fr.launch.py'])
     )
 
     # launch rl camera sensor
     camera_rl_launch = IncludeLaunchDescription(        
         PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory('lucid_vision_driver'), 'launch'),
+            get_package_share_directory('basic_launch'), 'launch', 'e4'),
             '/camera_rl.launch.py'])
     )
 
     # launch rr camera sensor
     camera_rr_launch = IncludeLaunchDescription(        
         PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory('lucid_vision_driver'), 'launch'),
+            get_package_share_directory('basic_launch'), 'launch', 'e4'),
             '/camera_rr.launch.py'])
     )
 
