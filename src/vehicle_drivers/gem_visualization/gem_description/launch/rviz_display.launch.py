@@ -9,7 +9,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
 
     package_description = "gem_description"
-    vehicle_name = os.environ.get('VEHICLE_NAME', 'e4')
+    vehicle_name = os.environ.get('VEHICLE_NAME', 'e4')  # Default to 'e4' if not set
 
     # Set the URDF file based on the vehicle name 'gem_e4.urdf.xacro' or 'gem_e2.urdf.xacro'
     urdf_file = 'gem_'+vehicle_name+'.urdf.xacro' 
