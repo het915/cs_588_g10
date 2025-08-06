@@ -8,14 +8,16 @@ from launch_ros.actions import Node
 # This is the function launch  system will look for
 def generate_launch_description():
 
-    urdf_file = 'gem_e4.urdf'
-    package_description = "gem_e4_description"
+    package_description = "gem_description"
+    vehicle_name = os.environ.get('VEHICLE_NAME', 'e4')
+
+    # Set the URDF file based on the vehicle name 'gem_e4.urdf.xacro' or 'gem_e2.urdf.xacro'
+    urdf_file = 'gem_'+vehicle_name+'.urdf.xacro' 
 
     print("Fetching URDF ==>")
-    robot_desc_path = os.path.join(get_package_share_directory(package_description), "urdf", urdf_file)
+    robot_desc_path = os.path.join(get_package_share_directory(package_description), "urdf", vehicle_name,  urdf_file)
 
     # Robot State Publisher
-    # xacro ~/src/robot_description/urdf/simple.urdf
     robot_state_publisher_node = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',

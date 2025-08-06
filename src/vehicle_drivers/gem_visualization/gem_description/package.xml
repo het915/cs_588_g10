@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>gem_e4_description</name>
+  <name>gem_description</name>
   <version>1.0.0</version>
   <description>Polaris GEM e4 description</description>
   <maintainer email="hangcui1201@gmail.com">Hang Cui</maintainer>

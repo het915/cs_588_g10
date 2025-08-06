@@ -50,7 +50,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/base_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/base_link.STL" />
       </geometry>
       <material name="">
         <color rgba="0 0 1 1" />
@@ -59,7 +59,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/base_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/base_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -84,7 +84,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/top_rack_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/top_rack_link.STL" />
       </geometry>
       <material name="">
         <color rgba="0 0 0 1" />
@@ -93,7 +93,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/top_rack_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/top_rack_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -114,7 +114,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/front_rack_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/front_rack_link.STL" />
       </geometry>
       <material name="">
         <color rgba="0 0 0 1" />
@@ -123,7 +123,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/front_rack_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/front_rack_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -144,7 +144,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/rear_rack_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/rear_rack_link.STL" />
       </geometry>
       <material name="">
         <color rgba="0 0 0 1" />
@@ -153,7 +153,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/rear_rack_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/rear_rack_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -174,7 +174,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/headlight_fr_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/headlight_fr_link.STL" />
       </geometry>
       <material name="">
         <color rgba="1 1 1 1" />
@@ -183,7 +183,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/headlight_fr_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/headlight_fr_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -204,7 +204,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/headlight_fl_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/headlight_fl_link.STL" />
       </geometry>
       <material name="">
         <color rgba="1 1 1 1" />
@@ -213,7 +213,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/headlight_fl_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/headlight_fl_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -234,7 +234,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/turnlight_fl_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/turnlight_fl_link.STL" />
       </geometry>
       <material name="">
         <color rgba="1 0.6 0.2 1" />
@@ -243,7 +243,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/turnlight_fl_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/turnlight_fl_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -264,7 +264,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/turnlight_fr_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/turnlight_fr_link.STL" />
       </geometry>
       <material name="">
         <color rgba="1 0.6 0.2 1" />
@@ -273,7 +273,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/turnlight_fr_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/turnlight_fr_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -294,7 +294,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/lightbar_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/lightbar_link.STL" />
       </geometry>
       <material name="">
         <color rgba="1 0 0 1" />
@@ -303,7 +303,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/lightbar_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/lightbar_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -325,7 +325,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/stoplight_rl_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/stoplight_rl_link.STL" />
       </geometry>
       <material name="">
         <color rgba="1 1 1 1" />
@@ -334,7 +334,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/stoplight_rl_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/stoplight_rl_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -355,7 +355,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/stoplight_rr_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/stoplight_rr_link.STL" />
       </geometry>
       <material name="">
         <color rgba="1 1 1 1" />
@@ -364,7 +364,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/stoplight_rr_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/stoplight_rr_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -385,7 +385,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/taillight_rl_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/taillight_rl_link.STL" />
       </geometry>
       <material name="">
         <color rgba="1 0 0 1" />
@@ -394,7 +394,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/taillight_rl_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/taillight_rl_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -415,7 +415,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/taillight_rr_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/taillight_rr_link.STL" />
       </geometry>
       <material name="">
         <color rgba="1 0 0 1" />
@@ -424,7 +424,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/taillight_rr_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/taillight_rr_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -445,7 +445,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/i_logo_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/i_logo_link.STL" />
       </geometry>
       <material name="">
         <color rgba="1 0.6 0.2 1" />
@@ -454,7 +454,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/i_logo_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/i_logo_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -475,7 +475,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/i_logo_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/i_logo_link.STL" />
       </geometry>
       <material name="">
         <color rgba="1 0.6 0.2 1" />
@@ -484,7 +484,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/i_logo_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/i_logo_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -505,7 +505,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/i_logo_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/i_logo_link.STL" />
       </geometry>
       <material name="">
         <color rgba="1 0.6 0.2 1" />
@@ -514,7 +514,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/i_logo_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/i_logo_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -535,7 +535,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/i_logo_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/i_logo_link.STL" />
       </geometry>
       <material name="">
         <color rgba="1 0.6 0.2 1" />
@@ -544,7 +544,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/i_logo_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/i_logo_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -567,7 +567,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/gps_antenna_main_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/gps_antenna_main_link.STL" />
       </geometry>
       <material name="">
         <color rgba="0.9 0.8 0.9 1" />
@@ -576,7 +576,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/gps_antenna_main_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/gps_antenna_main_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -597,7 +597,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/gps_antenna_aux_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/gps_antenna_aux_link.STL" />
       </geometry>
       <material name="">
         <color rgba="0.9 0.8 0.9 1" />
@@ -606,7 +606,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/gps_antenna_aux_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/gps_antenna_aux_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -627,7 +627,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/top_lidar_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/top_lidar_link.STL" />
       </geometry>
       <material name="">
         <color rgba="0.8 0.8 0.9 1" />
@@ -636,7 +636,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/top_lidar_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/top_lidar_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -657,7 +657,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/front_camera_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/front_camera_link.STL" />
       </geometry>
       <material name="">
         <color rgba="0.8 0.8 0.9 1" />
@@ -666,7 +666,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/front_camera_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/front_camera_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -687,7 +687,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/front_lidar_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/front_lidar_link.STL" />
       </geometry>
       <material name="">
         <color rgba="0.8 0.8 0.9 1" />
@@ -696,7 +696,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/front_lidar_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/front_lidar_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -717,7 +717,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/front_radar_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/front_radar_link.STL" />
       </geometry>
       <material name="">
         <color rgba="0.8 0.8 0.9 1" />
@@ -726,7 +726,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/front_radar_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/front_radar_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -747,7 +747,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/imu_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/imu_link.STL" />
       </geometry>
       <material name="">
         <color rgba="0.8 0.8 0.9 1" />
@@ -756,7 +756,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/imu_link.STL" />
+        <mesh filename="package://gem_description/meshes/e4/imu_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -795,7 +795,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/wheel_link_fl.STL"/>
+        <mesh filename="package://gem_description/meshes/e4/wheel_link_fl.STL"/>
       </geometry>
       <material name="">
         <color rgba="0 0 0 1" />
@@ -843,7 +843,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/wheel_link_fr.STL"/>
+        <mesh filename="package://gem_description/meshes/e4/wheel_link_fr.STL"/>
       </geometry>
       <material name="">
         <color rgba="0 0 0 1" />
@@ -875,7 +875,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/wheel_link_rl.STL"  />
+        <mesh filename="package://gem_description/meshes/e4/wheel_link_rl.STL"  />
       </geometry>
       <material name="">
         <color rgba="0 0 0 1" />
@@ -907,7 +907,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://gem_e4_description/meshes/wheel_link_rr.STL" />
+        <mesh filename="package://gem_description/meshes/e4/wheel_link_rr.STL" />
       </geometry>
       <material name="">
         <color rgba="0 0 0 1" />
