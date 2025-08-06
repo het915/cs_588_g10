@@ -79,21 +79,15 @@ def generate_launch_description():
             )
         )
     
-    rviz_launch = ExecuteProcess(
-            cmd=[
-                'rviz2',
-                '-d',
-                PathJoinSubstitution([
-                    FindPackageShare('platform_launch'),
-                    'rviz',
-                    'white_e2_text.rviz'
-                ])
-            ],
-            output='screen'
-        )
+    rviz_display_launch = IncludeLaunchDescription(        
+        PythonLaunchDescriptionSource([os.path.join(
+            get_package_share_directory('basic_launch'), 'launch'),
+            '/rviz_display.launch.py'])
+    )
 
     return LaunchDescription([
         zed_camera_launch,
         ouster_launch,
-        lucid_cam_launch
+        lucid_cam_launch,
+        rviz_display_launch
     ])

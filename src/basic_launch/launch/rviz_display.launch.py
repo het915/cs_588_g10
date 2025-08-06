@@ -2,17 +2,18 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.substitutions import Command
+from launch.substitutions import Command, EnvironmentVariable
 from launch_ros.actions import Node
+import os
 
 # This is the function launch  system will look for
 def generate_launch_description():
-
-    urdf_file = 'gem_e4.urdf'
-    package_description = "gem_e4_description"
+    vehicle_name=os.environ.get('VEHICLE_NAME','e4')
+    urdf_file = 'gem_'+ vehicle_name +'.urdf.xacro'
+    package_description = "gem_description"
 
     print("Fetching URDF ==>")
-    robot_desc_path = os.path.join(get_package_share_directory(package_description), "urdf", urdf_file)
+    robot_desc_path = os.path.join(get_package_share_directory(package_description), "urdf",vehicle_name, urdf_file)
 
     # Robot State Publisher
     # xacro ~/src/robot_description/urdf/simple.urdf
