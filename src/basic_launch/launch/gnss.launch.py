@@ -15,29 +15,29 @@ os.environ['RCUTILS_CONSOLE_OUTPUT_FORMAT'] = '{time}: [{name}] [{severity}]\t{m
 
 def generate_launch_description():
     
-    tf_imu = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        arguments = "0 0 0 0 0 0 base_link imu".split(' ')
-    )
+    # tf_imu = Node(
+    #     package="tf2_ros",
+    #     executable="static_transform_publisher",
+    #     arguments = "0 0 0 0 0 0 base_link imu".split(' ')
+    # )
 
-    tf_gnss = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        arguments = "0 0 0 0 0 0 imu gnss".split(' ')
-    )
+    # tf_gnss = Node(
+    #     package="tf2_ros",
+    #     executable="static_transform_publisher",
+    #     arguments = "0 0 0 0 0 0 imu gnss".split(' ')
+    # )
 
-    tf_vsm = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        arguments = "0 0 0 0 0 0 imu vsm".split(' ')
-    )
+    # tf_vsm = Node(
+    #     package="tf2_ros",
+    #     executable="static_transform_publisher",
+    #     arguments = "0 0 0 0 0 0 imu vsm".split(' ')
+    # )
 
-    tf_aux1 = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        arguments = "0 0 0 0 0 0 imu aux1".split(' ')
-    )
+    # tf_aux1 = Node(
+    #     package="tf2_ros",
+    #     executable="static_transform_publisher",
+    #     arguments = "0 0 0 0 0 0 imu aux1".split(' ')
+    # )
 
     default_file_name = 'ins.yaml'
     name_arg_file_name = "file_name"
@@ -72,4 +72,4 @@ def generate_launch_description():
         output='screen'
     )
 
-    return launch.LaunchDescription([arg_file_name, arg_file_path, container, tf_imu, tf_gnss, tf_vsm, tf_aux1])
+    return launch.LaunchDescription([arg_file_name, arg_file_path, container])

@@ -2,49 +2,58 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, RegisterEventHandler
 from launch.event_handlers import OnProcessStart
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import Command, FindExecutable, PathJoinSubstitution
+from launch.substitutions import PathJoinSubstitution, EnvironmentVariable, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from launch.conditions import IfCondition
+
 import os
 from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
-    robot_description_content = Command([
-        PathJoinSubstitution([FindExecutable(name='xacro')]),
-        ' ',
-        PathJoinSubstitution([FindPackageShare('gem_e2_description'), 'urdf', 'gem_e2.urdf.xacro'])
-    ])
+    vehicle_name_definition = DeclareLaunchArgument(
+        'vehicle_name',
+        default_value=EnvironmentVariable('VEHICLE_NAME'),
+        description='Name of the vehicle'
+    )
+    vehicle_name=LaunchConfiguration('vehicle_name')
 
-    robot_description = {'robot_description': robot_description_content}
+    # robot_description_content = Command([
+    #     PathJoinSubstitution([FindExecutable(name='xacro')]),
+    #     ' ',
+    #     PathJoinSubstitution([FindPackageShare('gem_e2_description'), 'urdf', 'gem_e2.urdf.xacro'])
+    # ])
+
+    # robot_description = {'robot_description': robot_description_content}
 
     
 
-    platform_launch = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                PathJoinSubstitution([
-                    FindPackageShare('platform_launch'),
-                    'launch',
-                    'white_e2',
-                    'platform.launch.py'
-                ])
-            ),
-            launch_arguments={'use_camera': 'true'}.items()
-        )
-    
     zed_camera_launch = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                PathJoinSubstitution([
-                    FindPackageShare('basic_launch'),
-                    'launch',
-                    'perception',
-                    'zed_camera.launch.py'
-                ])
-            ),
-            launch_arguments={
-                'camera_model' : 'zed2'}.items(),
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([
+                FindPackageShare('basic_launch'),
+                'launch',
+                'perception',
+                'zed_camera.launch.py'
+            ])
+        ),
+        launch_arguments={
+            'camera_model' : 'zed2'}.items(),
+        condition=IfCondition(
+            PythonExpression(["'", vehicle_name, "' == 'e2'"])
         )
-    
+    )
+
+    front_camera_launch = IncludeLaunchDescription(        
+        PythonLaunchDescriptionSource([os.path.join(
+            get_package_share_directory('depthai_ros_driver'), 'launch'),
+            '/rgbd_pcl.launch.py']),
+        condition=IfCondition(
+            PythonExpression(["'", vehicle_name, "' == 'e4'"])
+        )
+    )
+
     gnss_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 PathJoinSubstitution([
@@ -65,7 +74,8 @@ def generate_launch_description():
                 ])
             ),
             launch_arguments={
-                'param_file' : 'ouster_config'}.items(),
+                'param_file' : 'ouster_config',
+                'sensor_hostname' : 'os-122344001164.local'}.items(),
         )
     
     lucid_cam_launch = IncludeLaunchDescription(
@@ -77,7 +87,7 @@ def generate_launch_description():
                     'corner_cameras.launch.py'
                 ])
             )
-        )
+    )
     
     rviz_display_launch = IncludeLaunchDescription(        
         PythonLaunchDescriptionSource([os.path.join(
@@ -86,8 +96,10 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        vehicle_name_definition,
+        front_camera_launch,
         zed_camera_launch,
-        ouster_launch,
+        # ouster_launch,
         lucid_cam_launch,
         rviz_display_launch
     ])

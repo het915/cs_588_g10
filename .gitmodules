@@ -25,3 +25,6 @@
 [submodule "src/hardware_drivers/3rd_drivers/zed-ros2-wrapper"]
 	path = src/hardware_drivers/3rd_drivers/zed-ros2-wrapper
 	url = https://github.com/stereolabs/zed-ros2-wrapper.git
+[submodule "src/hardware_drivers/3rd_drivers/livox_ros_driver2"]
+	path = src/hardware_drivers/3rd_drivers/livox_ros_driver2
+	url = https://github.com/Livox-SDK/livox_ros_driver2.git

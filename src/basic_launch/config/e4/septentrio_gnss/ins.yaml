@@ -28,15 +28,15 @@ osnma:
   ntp_server: ""
   keep_open: true
 
-frame_id: gnss
+frame_id: gps_antenna_main_link
 
-imu_frame_id: imu
+imu_frame_id: imu_link
 
 poi_frame_id: base_link
 
 vsm_frame_id: vsm
 
-aux1_frame_id: aux1
+aux1_frame_id: gps_antenna_aux_link
 
 vehicle_frame_id: base_link
 

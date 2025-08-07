@@ -27,6 +27,10 @@ def generate_launch_description():
         camera_params = yaml.safe_load(f)
         camera_yaml_param_fl = camera_params["arena_camera_node_fl"]["ros__parameters"]
         camera_yaml_param_fr = camera_params["arena_camera_node_fr"]["ros__parameters"]
+        if (vehicle_name=='e4'):
+            camera_yaml_param_rl = camera_params["arena_camera_node_rl"]["ros__parameters"]
+            camera_yaml_param_rr = camera_params["arena_camera_node_rr"]["ros__parameters"]
+
 
     fr_camera_container = ComposableNodeContainer(
         name="arena_camera_container_right",
@@ -105,13 +109,92 @@ def generate_launch_description():
         ],
         output="both",
     )
+    rl_camera_container = ComposableNodeContainer(
+        name="camera_node_rl",
+        namespace="/perception/object_detection",
+        package="rclcpp_components",
+        executable="component_container",
+        composable_node_descriptions=[
+            ComposableNode(
+                package="lucid_vision_driver",
+                plugin="ArenaCameraNode",
+                name="arena_camera_node_rl",
+                parameters=[{"camera_name": camera_yaml_param_rl['camera_name'],
+                             "frame_id": camera_yaml_param_rl['frame_id'],
+                             "pixel_format": camera_yaml_param_rl['pixel_format'],
+                             "serial_no": camera_yaml_param_rl['serial_no'],
+                             "camera_info_url": camera_yaml_param_rl['camera_info_url'],
+                             "fps": camera_yaml_param_rl['fps'],
+                             "horizontal_binning": camera_yaml_param_rl['horizontal_binning'],
+                             "vertical_binning": camera_yaml_param_rl['vertical_binning'],
+                             "use_default_device_settings": camera_yaml_param_rl['use_default_device_settings'],
+                             "exposure_auto": camera_yaml_param_rl['exposure_auto'],
+                             "exposure_target": camera_yaml_param_rl['exposure_target'],
+                             "gain_auto": camera_yaml_param_rl['gain_auto'],
+                             "gain_target": camera_yaml_param_rl['gain_target'],
+                             "gamma_target": camera_yaml_param_rl['gamma_target'],
+                             "image_horizontal_flip": camera_yaml_param_rl['image_horizontal_flip'],
+                             "image_vertical_flip": camera_yaml_param_rl['image_vertical_flip'],                             
+                             "enable_compressing": camera_yaml_param_rl['enable_compressing'],
+                             "enable_rectifying": camera_yaml_param_rl['enable_rectifying'],
+                             }],
+                remappings=[
+                ],
+                extra_arguments=[
+                    {"use_intra_process_comms": True}
+                ],
+            ),
+        ],
+        output="both",
+    )
+
+    rr_camera_container = ComposableNodeContainer(
+        name="camera_node_rr",
+        namespace="/perception/object_detection",
+        package="rclcpp_components",
+        executable="component_container",
+        composable_node_descriptions=[
+            ComposableNode(
+                package="lucid_vision_driver",
+                plugin="ArenaCameraNode",
+                name="arena_camera_node_rr",
+                parameters=[{"camera_name": camera_yaml_param_rr['camera_name'],
+                             "frame_id": camera_yaml_param_rr['frame_id'],
+                             "pixel_format": camera_yaml_param_rr['pixel_format'],
+                             "serial_no": camera_yaml_param_rr['serial_no'],
+                             "camera_info_url": camera_yaml_param_rr['camera_info_url'],
+                             "fps": camera_yaml_param_rr['fps'],
+                             "horizontal_binning": camera_yaml_param_rr['horizontal_binning'],
+                             "vertical_binning": camera_yaml_param_rr['vertical_binning'],
+                             "use_default_device_settings": camera_yaml_param_rr['use_default_device_settings'],
+                             "exposure_auto": camera_yaml_param_rr['exposure_auto'],
+                             "exposure_target": camera_yaml_param_rr['exposure_target'],
+                             "gain_auto": camera_yaml_param_rr['gain_auto'],
+                             "gain_target": camera_yaml_param_rr['gain_target'],
+                             "gamma_target": camera_yaml_param_rr['gamma_target'],
+                             "image_horizontal_flip": camera_yaml_param_rr['image_horizontal_flip'],
+                             "image_vertical_flip": camera_yaml_param_rr['image_vertical_flip'],                             
+                             "enable_compressing": camera_yaml_param_rr['enable_compressing'],
+                             "enable_rectifying": camera_yaml_param_rr['enable_rectifying'],
+                             }],
+                remappings=[
+                ],
+                extra_arguments=[
+                    {"use_intra_process_comms": True}
+                ],
+            ),
+        ],
+        output="both",
+    )
 
     # create and return launch description object
     return LaunchDescription(
         [            
             *launch_arguments,
             fl_camera_container,
-            fr_camera_container
+            fr_camera_container,
+            rl_camera_container,
+            rr_camera_container
         ]
         
     )
