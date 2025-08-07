@@ -54,15 +54,6 @@ def generate_launch_description():
         )
     )
 
-    gnss_launch = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                PathJoinSubstitution([
-                    FindPackageShare('septentrio_gnss_driver'),
-                    'launch',
-                    'rover.launch.py'
-                ])
-            )
-        )
     # Top Lidar
     ouster_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -74,8 +65,7 @@ def generate_launch_description():
                 ])
             ),
             launch_arguments={
-                'param_file' : 'ouster_config',
-                'sensor_hostname' : 'os-122344001164.local'}.items(),
+                'param_file' : 'ouster_config'}.items(),
         )
     
     lucid_cam_launch = IncludeLaunchDescription(
@@ -99,7 +89,7 @@ def generate_launch_description():
         vehicle_name_definition,
         front_camera_launch,
         zed_camera_launch,
-        # ouster_launch,
+        ouster_launch,
         lucid_cam_launch,
         rviz_display_launch
     ])
