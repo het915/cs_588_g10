@@ -1315,7 +1315,7 @@
     <child link="IMU_link"/>
   </joint>
 
-    <link name="vsm"/>
+  <link name="vsm"/>
   <joint name="velocity_sensor_joint" type="fixed">
     <origin xyz="0.0 0 0.0" rpy="0 0 0"/>
     <parent link="IMU_link"/>

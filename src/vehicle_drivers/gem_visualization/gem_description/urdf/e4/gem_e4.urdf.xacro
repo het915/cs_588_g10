@@ -884,6 +884,13 @@
     <axis xyz="0 0 0" />
   </joint>
 
+  <link name="vsm"/>
+  <joint name="velocity_sensor_joint" type="fixed">
+    <origin xyz="0.0 0 0.0" rpy="0 0 0"/>
+    <parent link="imu_link"/>
+    <child link="vsm"/>
+  </joint>
+
   <!-- *********************************** Front Left Wheel *********************************** -->
 
   <link name="left_steering_hinge_link">
