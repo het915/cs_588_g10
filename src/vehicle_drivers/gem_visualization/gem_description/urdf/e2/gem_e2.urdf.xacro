@@ -1310,9 +1310,16 @@
 
 
   <joint name="IMU_joint" type="fixed">
-    <origin xyz="-0.246 0 0.05" rpy="0 0 -1.5708"/>
+    <origin xyz="-0.05 -0.4 0.05" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child link="IMU_link"/>
+  </joint>
+
+    <link name="vsm"/>
+  <joint name="velocity_sensor_joint" type="fixed">
+    <origin xyz="0.0 0 0.0" rpy="0 0 0"/>
+    <parent link="IMU_link"/>
+    <child link="vsm"/>
   </joint>
 
 

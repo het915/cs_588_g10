@@ -8,12 +8,12 @@ import os
 
 # This is the function launch  system will look for
 def generate_launch_description():
-    vehicle_name=os.environ.get('VEHICLE_NAME','e4')
-    urdf_file = 'gem_'+ vehicle_name +'.urdf.xacro'
+    vehicle_env=os.environ.get('VEHICLE_NAME','e4')
+    urdf_file = 'gem_'+ vehicle_env +'.urdf.xacro'
     package_description = "gem_description"
 
     print("Fetching URDF ==>")
-    robot_desc_path = os.path.join(get_package_share_directory(package_description), "urdf",vehicle_name, urdf_file)
+    robot_desc_path = os.path.join(get_package_share_directory(package_description), "urdf",vehicle_env, urdf_file)
 
     # Robot State Publisher
     # xacro ~/src/robot_description/urdf/simple.urdf
@@ -35,7 +35,8 @@ def generate_launch_description():
     )
 
     # RVIZ Configuration
-    rviz_config_dir = os.path.join(get_package_share_directory("basic_launch"), 'rviz', 'gem_e4.rviz')
+    rviz_config_file='gem_'+vehicle_env+'.rviz'
+    rviz_config_dir = os.path.join(get_package_share_directory("basic_launch"), 'rviz', rviz_config_file)
 
     rviz_node = Node(
             package='rviz2',

@@ -872,13 +872,6 @@
       </geometry>
     </collision>
   </link>
-<link name="vsm"/>
-<!-- Fixed joint connecting imu_link to vsm -->
-<joint name="imu_to_vsm_joint" type="fixed">
-  <parent link="imu_link" />
-  <child link="vsm" />
-  <origin xyz="0 0 0" rpy="0 0 0" />
-</joint>
 
   <gazebo reference="imu_link">
     <material>Gazebo/White</material>

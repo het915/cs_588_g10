@@ -37,11 +37,17 @@ def generate_launch_description():
     vehicle_name = LaunchConfiguration('vehicle_name')
 
     init_gps_arg = DeclareLaunchArgument(
-        'init_gps',
+        'gps_init',
         default_value='true',
         description='Set to true to startup GPS'
     )
-    init_gps = LaunchConfiguration('init_gps')
+    gps_init = LaunchConfiguration('gps_init')
+    init_zed_arg = DeclareLaunchArgument(
+        'zed_init',
+        default_value='true',
+        description='Set to true to startup GPS'
+    )
+    zed_init = LaunchConfiguration('zed_init')
 
     ouster_ros_pkg_dir = get_package_share_directory('basic_launch')
     ouster_params_file = PathJoinSubstitution([
@@ -124,7 +130,9 @@ def generate_launch_description():
         launch_arguments={
             'camera_model' : 'zed2'}.items(),
         condition=IfCondition(
-            PythonExpression(["'", vehicle_name, "' == 'e2'"])
+            PythonExpression(["'", vehicle_name, "' == 'e2' and ",
+                              "'", zed_init,"' == 'true'"
+                              ]),
         )
     )
     rviz_display_launch = IncludeLaunchDescription(        
@@ -144,7 +152,7 @@ def generate_launch_description():
         package='septentrio_gnss_driver', 
         plugin='rosaic_node::ROSaicNode',
         parameters=[gnss_config],
-        condition=IfCondition(init_gps)
+        condition=IfCondition(gps_init)
     )
     
     gem_gnss_image_node = Node(
@@ -152,7 +160,7 @@ def generate_launch_description():
         executable='gem_gnss_image',
         output='screen',
         name='gem_gnss_image_node',
-        condition=IfCondition(init_gps)
+        condition=IfCondition(gps_init)
     )
 
     gnss_container = ComposableNodeContainer(
@@ -164,19 +172,19 @@ def generate_launch_description():
         sigterm_timeout = '20',
         composable_node_descriptions=[gnss_node],
         output='screen',
-        condition=IfCondition(init_gps)
+        condition=IfCondition(gps_init)
     )
     launch_lucid_on_active = RegisterEventHandler(
         OnStateTransition(
             target_lifecycle_node=os_driver, goal_state='active',
             entities=[
                 LogInfo(msg="os_driver is active. Launching Lucid corner cameras..."),
+                rviz_display_launch,
                 gnss_container,
                 gem_gnss_image_node,
                 lucid_cam_launch,
                 front_camera_launch,
                 zed_camera_launch,
-                rviz_display_launch
             ],
             handle_once=True
         )
@@ -186,6 +194,7 @@ def generate_launch_description():
     return launch.LaunchDescription([
         vehicle_name_arg,
         init_gps_arg,
+        init_zed_arg,
         os_driver,
         os_sensor_configure_event,
         os_sensor_activate_event,
