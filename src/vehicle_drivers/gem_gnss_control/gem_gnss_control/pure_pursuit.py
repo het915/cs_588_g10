@@ -81,19 +81,52 @@ class OnlineFilter:
 class PurePursuit(Node):
     def __init__(self):
         super().__init__('pure_pursuit_node')
+        # Declare parameters with default values
+        self.declare_parameter('rate_hz', 20)
+        self.declare_parameter('look_ahead', 5.0)
+        self.declare_parameter('wheelbase', 2.57)
+        self.declare_parameter('offset', 1.26)
+        self.declare_parameter('origin_lat', 40.0927422)
+        self.declare_parameter('origin_lon', -88.2359639)
+        self.declare_parameter('desired_speed', 2.0)
+        self.declare_parameter('max_acceleration', 0.5)
 
-        self.rate_hz = 20
-        self.look_ahead = 5.0
-        self.wheelbase = 2.57
-        self.offset = 1.26
+        self.declare_parameter('pid/kp', 0.6)
+        self.declare_parameter('pid/ki', 0.0)
+        self.declare_parameter('pid/kd', 0.1)
+        self.declare_parameter('pid/wg', 10)
 
-        self.lat = 0.0
-        self.lon = 0.0
-        self.heading = 0.0
-        self.speed = 0.0
+        self.declare_parameter('filter/cutoff', 1.2)
+        self.declare_parameter('filter/fs', 30)
+        self.declare_parameter('filter/order', 4)
+        self.declare_parameter('vehicle_name', "")
+        
+        vehicle_name=self.get_parameter('vehicle_name').value
+        if (vehicle_name==""):
+            self.get_logger().warn("No vehicle_name parameter found. No config file loaded, defaulting to 'e4' parameters.")
+        else:
+            self.get_logger().info(f"Using vehicle config: {vehicle_name}")
 
-        self.olat = 40.0927422
-        self.olon = -88.2359639
+
+        self.rate_hz = self.get_parameter('rate_hz').value
+        self.look_ahead = self.get_parameter('look_ahead').value
+        self.wheelbase = self.get_parameter('wheelbase').value
+        self.offset = self.get_parameter('offset').value
+        self.olat = self.get_parameter('origin_lat').value
+        self.olon = self.get_parameter('origin_lon').value
+
+        self.desired_speed = max(5,self.get_parameter('desired_speed').value) # desired speed capped at 5 m/s
+        self.max_accel = max(2, self.get_parameter('max_acceleration').value) # max acceleration capped at 2 m/s^2
+        self.pid_speed = PID(
+            kp=self.get_parameter('pid/kp').value,
+            ki=self.get_parameter('pid/ki').value,
+            kd=self.get_parameter('pid/kd').value,
+            wg=self.get_parameter('pid/wg').value
+            )
+        self.speed_filter = OnlineFilter(
+            cutoff=self.get_parameter('filter/cutoff').value,
+            fs=self.get_parameter('filter/fs').value,
+            order=self.get_parameter('filter/order').value,)
 
         self.goal = 0
 
@@ -121,13 +154,15 @@ class PurePursuit(Node):
 
         self.read_waypoints()
 
+        # Initialize
+        self.lat = 0.0
+        self.lon = 0.0
+        self.heading = 0.0
+        self.speed = 0.0
         self.gem_enable = False
         self.pacmod_enable = False
 
-        self.desired_speed = 2.0  # m/s
-        self.max_accel = 0.5
-        self.pid_speed = PID(0.6, 0.0, 0.1, wg=10)
-        self.speed_filter = OnlineFilter(1.2, 30, 4)
+        
 
         self.dist_arr = np.zeros(len(self.path_points_lon_x))
 
