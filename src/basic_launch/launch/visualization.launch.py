@@ -13,8 +13,8 @@ def generate_launch_description():
     # launch gnss_ins sensor
     gnss_launch = IncludeLaunchDescription(        
         PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory('basic_launch'), 'launch'),
-            '/gnss.launch.py'])
+            get_package_share_directory('septentrio_gnss_driver'), 'launch'),
+            '/rover.launch.py'])
     )
 
     gnss_with_ns_launch = GroupAction(

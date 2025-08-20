@@ -6,6 +6,9 @@ from launch_ros.descriptions import ComposableNode
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, Command, TextSubstitution
 from ament_index_python.packages import get_package_share_directory
+from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription,
+                            RegisterEventHandler, EmitEvent, LogInfo)
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 os.environ['RCUTILS_CONSOLE_OUTPUT_FORMAT'] = '{time}: [{name}] [{severity}]\t{message}'
 # Verbose log:
@@ -15,29 +18,19 @@ os.environ['RCUTILS_CONSOLE_OUTPUT_FORMAT'] = '{time}: [{name}] [{severity}]\t{m
 
 def generate_launch_description():
     
-    # tf_imu = Node(
-    #     package="tf2_ros",
-    #     executable="static_transform_publisher",
-    #     arguments = "0 0 0 0 0 0 base_link imu".split(' ')
-    # )
+    rviz_display_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([os.path.join(
+            get_package_share_directory('basic_launch'), 'launch'),
+            '/rviz_display.launch.py'])
+    )
 
-    # tf_gnss = Node(
-    #     package="tf2_ros",
-    #     executable="static_transform_publisher",
-    #     arguments = "0 0 0 0 0 0 imu gnss".split(' ')
-    # )
+    gem_gnss_image_node = Node(
+        package='gem_gnss_image',
+        executable='gem_gnss_image',
+        output='screen',
+        name='gem_gnss_image_node',
+    )
 
-    # tf_vsm = Node(
-    #     package="tf2_ros",
-    #     executable="static_transform_publisher",
-    #     arguments = "0 0 0 0 0 0 imu vsm".split(' ')
-    # )
-
-    # tf_aux1 = Node(
-    #     package="tf2_ros",
-    #     executable="static_transform_publisher",
-    #     arguments = "0 0 0 0 0 0 imu aux1".split(' ')
-    # )
 
     default_file_name = 'ins.yaml'
     name_arg_file_name = "file_name"
@@ -72,4 +65,4 @@ def generate_launch_description():
         output='screen'
     )
 
-    return launch.LaunchDescription([arg_file_name, arg_file_path, container])
+    return launch.LaunchDescription([arg_file_name, arg_file_path, gem_gnss_image_node, rviz_display_launch, container])

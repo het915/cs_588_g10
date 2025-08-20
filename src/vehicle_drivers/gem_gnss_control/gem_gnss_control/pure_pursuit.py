@@ -115,8 +115,8 @@ class PurePursuit(Node):
         self.olat = self.get_parameter('origin_lat').value
         self.olon = self.get_parameter('origin_lon').value
 
-        self.desired_speed = max(5,self.get_parameter('desired_speed').value) # desired speed capped at 5 m/s
-        self.max_accel = max(2, self.get_parameter('max_acceleration').value) # max acceleration capped at 2 m/s^2
+        self.desired_speed = min(5.0,self.get_parameter('desired_speed').value) # desired speed capped at 5 m/s
+        self.max_accel = min(2.0, self.get_parameter('max_acceleration').value) # max acceleration capped at 2 m/s^2
         self.pid_speed = PID(
             kp=self.get_parameter('pid/kp').value,
             ki=self.get_parameter('pid/ki').value,
