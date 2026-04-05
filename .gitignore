@@ -1,7 +1,45 @@
+# Colcon build artifacts
 build/
 install/
 log/
-__pycache__*/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+
+# C/C++ build artifacts
+*.o
+*.so
+*.a
+*.d
+CMakeFiles/
+cmake_install.cmake
+CMakeCache.txt
+Makefile
+compile_commands.json
+
+# IDEs
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ROS
 COLCON_IGNORE
+*.bag
+*.db3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Sensor metadata
 *metadata.json
+
+# Claude Code
+.claude/
+CLAUDE.md
