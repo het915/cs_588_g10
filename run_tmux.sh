@@ -3,6 +3,7 @@ SESSION=gem
 SETUP="source install/setup.bash"
 
 tmux new-session -d -s $SESSION -n sensor "bash -c '$SETUP && ros2 launch basic_launch sensor_init.launch.py; exec bash'"
+tmux set-option -t $SESSION -g mouse on
 tmux new-window -t $SESSION -n cameras "bash -c '$SETUP && ros2 launch basic_launch corner_cameras.launch.py; exec bash'"
 tmux new-window -t $SESSION -n gnss "bash -c '$SETUP && ros2 launch basic_launch visualization.launch.py; exec bash'"
 tmux new-window -t $SESSION -n joystick "bash -c '$SETUP && ros2 launch basic_launch dbw_joystick.launch.py; exec bash'"
