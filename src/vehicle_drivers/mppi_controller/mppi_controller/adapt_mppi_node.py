@@ -49,6 +49,7 @@ from .utils import (
     default_waypoints_path, load_waypoints, demo_positions,
 )
 
+_DISABLE_DRIVE_COMMANDS = True
 
 class AdaptMPPINode(Node):
     def __init__(self):
@@ -313,7 +314,6 @@ class AdaptMPPINode(Node):
     #  Control loop                                                            #
     # ---------------------------------------------------------------------- #
 
-    #TODO: Check this function. We might not use it.
     def _gem_state(self):
         """Return (x, y, yaw) in ENU, antenna-offset corrected."""
         local_x, local_y, _ = geodetic2enu(
@@ -372,7 +372,6 @@ class AdaptMPPINode(Node):
 
         sw_deg = front2steer(math.degrees(delta))
         self.steer_cmd.angular_position = math.radians(sw_deg)
-        self.steer_pub.publish(self.steer_cmd)
 
         self._v_cmd = max(
             0.0,
@@ -389,8 +388,18 @@ class AdaptMPPINode(Node):
         else:
             self.accel_cmd.command = 0.0
             self.brake_cmd.command = min(abs(pid_out), self.max_brake)
-        self.accel_pub.publish(self.accel_cmd)
-        self.brake_pub.publish(self.brake_cmd)
+        
+
+        # Disable actual drive commands for now
+        if _DISABLE_DRIVE_COMMANDS:
+            self.accel_cmd.command = 0.0
+            self.brake_cmd.command = 0.0
+            self.steer_cmd.angular_position = 0.0
+        else:
+            self.steer_pub.publish(self.steer_cmd)
+            self.accel_pub.publish(self.accel_cmd)
+            self.brake_pub.publish(self.brake_cmd)
+            
         self.global_cmd.enable = True
         self.global_pub.publish(self.global_cmd)
 
