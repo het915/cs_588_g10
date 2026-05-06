@@ -18,6 +18,7 @@ from rclpy.qos import QoSProfile, DurabilityPolicy, HistoryPolicy
 
 from nav_msgs.msg import Path
 from geometry_msgs.msg import Point, PoseStamped
+from std_msgs.msg import Float64
 from visualization_msgs.msg import Marker, MarkerArray
 
 
@@ -45,6 +46,8 @@ class MPPIVisualizer:
         self._samples_pub= node.create_publisher(MarkerArray, '/adapt/viz/sampled_trajectories', 10)
         self._obs_pub    = node.create_publisher(MarkerArray, '/adapt/viz/obstacles',            10)
         self._traj_pub   = node.create_publisher(Path,        '/adapt/viz/robot_trajectory',     10)
+        self._accel_pub  = node.create_publisher(Float64,     '/adapt/viz/debug/accel',          10)
+        self._delta_pub  = node.create_publisher(Float64,     '/adapt/viz/debug/delta',          10)
 
     # ---------------------------------------------------------------------- #
     #  Public API                                                              #
@@ -68,7 +71,8 @@ class MPPIVisualizer:
         ps.pose.orientation.w = math.cos(half)
         self._robot_traj_poses.append(ps)
 
-    def publish(self, mppi, obstacles: np.ndarray, stamp) -> None:
+    def publish(self, mppi, obstacles: np.ndarray, stamp,
+                accel: float = None, delta: float = None) -> None:
         """Publish all per-tick visualisation topics."""
         if mppi.last_traj is None:
             return
@@ -76,6 +80,10 @@ class MPPIVisualizer:
         self._pub_sampled_rollouts(mppi, stamp)
         self._pub_obstacle_markers(mppi, obstacles, stamp)
         self._pub_robot_trajectory(stamp)
+        if accel is not None:
+            self._accel_pub.publish(Float64(data=float(accel)))
+        if delta is not None:
+            self._delta_pub.publish(Float64(data=float(delta)))
 
     # ---------------------------------------------------------------------- #
     #  Private helpers                                                         #

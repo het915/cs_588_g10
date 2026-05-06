@@ -412,7 +412,7 @@ class AdaptMPPINode(Node):
             throttle_duration_sec=1.0,
         )
 
-        self.viz.publish(self.mppi, self.obstacles, stamp)
+        self.viz.publish(self.mppi, self.obstacles, stamp, accel=accel, delta=delta)
 
 
 # --------------------------------------------------------------------------- #
