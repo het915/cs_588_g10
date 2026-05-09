@@ -28,7 +28,7 @@ from rclpy.node import Node
 
 from std_msgs.msg import Bool, Int32MultiArray, Float32MultiArray
 from sensor_msgs.msg import NavSatFix
-from geometry_msgs.msg import PoseArray
+from geometry_msgs.msg import PoseArray, PoseStamped
 from pacmod2_msgs.msg import (
     GlobalCmd, PositionWithSpeed, SystemCmdFloat, SystemCmdInt,
     VehicleSpeedRpt,
@@ -43,6 +43,7 @@ except ImportError:
 
 from .mppi import MPPI
 from .viz import MPPIVisualizer
+from .reference_path import ReferencePath
 from .utils import (
     PID, OnlineFilter,
     geodetic2enu, heading_to_yaw, front2steer,
@@ -52,8 +53,8 @@ from .utils import (
 _DISABLE_DRIVE_COMMANDS = True
 
 class AdaptMPPINode(Node):
-    def __init__(self):
-        super().__init__(
+    def _init_(self):
+        super()._init_(
             'adapt_mppi_node',
             automatically_declare_parameters_from_overrides=True,
         )
@@ -125,21 +126,10 @@ class AdaptMPPINode(Node):
             order=int(p('filter.order')),
         )
 
-        wp_csv = str(p('waypoints_csv')) or default_waypoints_path()
-
-        print(f"Wp_csv: {wp_csv}")
-
-
-        self.ref_path = load_waypoints(wp_csv, self.olat, self.olon)
-
-        self.obstacles = demo_positions(
-            self.ref_path, list(p('demo.ped_arc_fractions')), lateral=0.0,
-        )
-        self.cones = demo_positions(
-            self.ref_path,
-            list(p('demo.cone_arc_fractions')),
-            lateral=float(p('demo.cone_lateral_offset')),
-        )
+        # Start with no reference path; wait for /goal_pose
+        self.ref_path = None
+        self.obstacles = np.zeros((0, 2))
+        self.cones = np.zeros((0, 2))
 
         # ------------------------------------------------------------------ #
         #  Subscribers                                                         #
@@ -171,6 +161,7 @@ class AdaptMPPINode(Node):
                 'Obstacle source: /fusion_pedestrian_position (raw detections)'
             )
         self.create_subscription(PoseArray, self.cone_topic, self._cones_cb, 10)
+        self.create_subscription(PoseStamped, '/goal_pose', self._goal_cb, 10)
         self.get_logger().info(f'Cone source: {self.cone_topic}')
 
         # ------------------------------------------------------------------ #
@@ -194,7 +185,8 @@ class AdaptMPPINode(Node):
         #  Visualisation                                                        #
         # ------------------------------------------------------------------ #
         self.viz = MPPIVisualizer(self, str(p('viz.frame_id')), int(p('viz.num_samples')))
-        self.viz.publish_static(self.ref_path)
+        if self.ref_path is not None:
+            self.viz.publish_static(self.ref_path)
 
         # ------------------------------------------------------------------ #
         #  Timer                                                               #
@@ -202,7 +194,7 @@ class AdaptMPPINode(Node):
         self.create_timer(1.0 / self.rate_hz, self._control_loop)
         self.get_logger().info(
             f'adapt_mppi_node ready — {self.rate_hz:.1f} Hz, '
-            f'{len(self.ref_path.xy)} waypoints, v_ref={self.desired_speed:.1f} m/s'
+            f'v_ref={self.desired_speed:.1f} m/s'
         )
 
     # ---------------------------------------------------------------------- #
@@ -310,6 +302,17 @@ class AdaptMPPINode(Node):
             dtype=np.float32,
         )
 
+    def _goal_cb(self, msg: PoseStamped):
+        """Update reference path to just the goal waypoint."""
+        gx, gy = msg.pose.position.x, msg.pose.position.y
+        # ReferencePath needs >= 2 points; use the goal twice.
+        pts = np.array([[gx, gy], [gx, gy]], dtype=np.float32)
+        
+        self.ref_path = ReferencePath(pts)
+        self.get_logger().info(f'New goal received: ({gx:.2f}, {gy:.2f}). Reference path set to waypoint.')
+        # Also update the static viz
+        self.viz.publish_static(self.ref_path)
+
     # ---------------------------------------------------------------------- #
     #  Control loop                                                            #
     # ---------------------------------------------------------------------- #
@@ -342,14 +345,21 @@ class AdaptMPPINode(Node):
         self.get_logger().warn('PACMod primed: enable + FORWARD')
 
     def _control_loop(self):
-        if self.require_pacmod_enable and not self.pacmod_enable:
-            return
+        # if self.require_pacmod_enable and not self.pacmod_enable:
+        #     print(f"Missing pacmode")
+        #     return
         if self.lat == 0.0 and self.lon == 0.0:
+            print(f"Missing gps")
             return
         if not self._has_valid_heading:
+            print(f"Missing heading")
             return
         if not self._pacmod_primed:
             self._prime_pacmod()
+
+        if self.ref_path is None:
+            # Optionally log this every few seconds if needed
+            return
 
         x, y, yaw = self._gem_state()
         state = np.array([x, y, yaw, max(self.speed, 0.0)], dtype=float)
@@ -405,6 +415,7 @@ class AdaptMPPINode(Node):
 
         ess = self.mppi.effective_sample_count()
         self.get_logger().info(
+            f'Ref path {active_path}'
             f'MPPI | pos=({x:.2f},{y:.2f}) yaw={math.degrees(yaw):.1f}deg '
             f'v={self.speed:.2f}→{self._v_cmd:.2f} '
             f'thr={self.accel_cmd.command:.2f} brk={self.brake_cmd.command:.2f} '
@@ -412,7 +423,7 @@ class AdaptMPPINode(Node):
             throttle_duration_sec=1.0,
         )
 
-        self.viz.publish(self.mppi, self.obstacles, stamp, accel=accel, delta=delta)
+        self.viz.publish(self.mppi, self.obstacles, stamp, accel=accel, delta=delta, state=state)
 
 
 # --------------------------------------------------------------------------- #
@@ -430,5 +441,5 @@ def main(args=None):
             rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if _name_ == '_main_':
     main()

@@ -454,6 +454,31 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
+    - Class: rviz_default_plugins/Path
+      Name: Robot Trajectory
+      Enabled: true
+      Alpha: 1.0
+      Buffer Length: 1
+      Color: 0; 180; 255
+      Line Style: Billboards
+      Line Width: 0.10
+      Topic:
+        Value: /adapt/viz/robot_trajectory
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+    - Class: rviz_default_plugins/Marker
+      Name: Current Goal
+      Enabled: true
+      Namespaces:
+        current_goal: true
+      Topic:
+        Value: /adapt/viz/current_goal
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

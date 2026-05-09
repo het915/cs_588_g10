@@ -30,7 +30,7 @@ _LATCHED = QoSProfile(
 
 
 class MPPIVisualizer:
-    def __init__(self, node: Node, frame_id: str, num_samples: int):
+    def _init_(self, node: Node, frame_id: str, num_samples: int):
         self._node      = node
         self.frame_id   = frame_id
         self._palette   = [
@@ -54,7 +54,8 @@ class MPPIVisualizer:
     # ---------------------------------------------------------------------- #
 
     def publish_static(self, ref_path) -> None:
-        """Publish reference path and goal marker once (latched)."""
+        """Store reference path and goal marker for per-tick publishing."""
+        self._current_ref_path = ref_path
         stamp = self._node.get_clock().now().to_msg()
         self._pub_reference_path(ref_path, stamp)
         self._pub_goal_marker(ref_path, stamp)
@@ -72,13 +73,27 @@ class MPPIVisualizer:
         self._robot_traj_poses.append(ps)
 
     def publish(self, mppi, obstacles: np.ndarray, stamp,
-                accel: float = None, delta: float = None) -> None:
+                accel: float = None, delta: float = None, state: np.ndarray = None,
+                ref_path = None) -> None:
         """Publish all per-tick visualisation topics."""
         if mppi.last_traj is None:
             return
-        self._pub_chosen_trajectory(mppi, stamp)
-        self._pub_sampled_rollouts(mppi, stamp)
-        self._pub_obstacle_markers(mppi, obstacles, stamp)
+
+        # If base_link, we need the current ego pose to transform global -> local
+        ego_pose = None
+        if self.frame_id == 'base_link' and state is not None:
+            ego_pose = (state[0], state[1], state[2]) # x, y, yaw
+
+        if ref_path is not None:
+            self._current_ref_path = ref_path
+        
+        if hasattr(self, '_current_ref_path') and self._current_ref_path is not None:
+            self._pub_reference_path(self._current_ref_path, stamp, ego_pose)
+            self._pub_goal_marker(self._current_ref_path, stamp, ego_pose)
+
+        self._pub_chosen_trajectory(mppi, stamp, ego_pose)
+        self._pub_sampled_rollouts(mppi, stamp, ego_pose)
+        self._pub_obstacle_markers(mppi, obstacles, stamp, ego_pose)
         self._pub_robot_trajectory(stamp)
         if accel is not None:
             self._accel_pub.publish(Float64(data=float(accel)))
@@ -89,20 +104,32 @@ class MPPIVisualizer:
     #  Private helpers                                                         #
     # ---------------------------------------------------------------------- #
 
-    def _pub_reference_path(self, ref_path, stamp) -> None:
+    def _transform(self, x, y, ego_pose):
+        """Transform global ENU (x,y) to local robot frame (lx, ly)."""
+        if ego_pose is None:
+            return float(x), float(y)
+        ex, ey, eyaw = ego_pose
+        dx, dy = x - ex, y - ey
+        cos_y, sin_y = math.cos(eyaw), math.sin(eyaw)
+        lx = dx * cos_y + dy * sin_y
+        ly = -dx * sin_y + dy * cos_y
+        return float(lx), float(ly)
+
+    def _pub_reference_path(self, ref_path, stamp, ego_pose=None) -> None:
         msg = Path()
         msg.header.frame_id = self.frame_id
         msg.header.stamp    = stamp
         for x, y in ref_path.xy:
             ps = PoseStamped()
             ps.header = msg.header
-            ps.pose.position.x   = float(x)
-            ps.pose.position.y   = float(y)
+            lx, ly = self._transform(x, y, ego_pose)
+            ps.pose.position.x   = lx
+            ps.pose.position.y   = ly
             ps.pose.orientation.w = 1.0
             msg.poses.append(ps)
         self._ref_pub.publish(msg)
 
-    def _pub_goal_marker(self, ref_path, stamp) -> None:
+    def _pub_goal_marker(self, ref_path, stamp, ego_pose=None) -> None:
         gx, gy = float(ref_path.xy[-1, 0]), float(ref_path.xy[-1, 1])
         m = Marker()
         m.header.frame_id = self.frame_id
@@ -111,8 +138,9 @@ class MPPIVisualizer:
         m.id              = 0
         m.type            = Marker.SPHERE
         m.action          = Marker.ADD
-        m.pose.position.x  = gx
-        m.pose.position.y  = gy
+        lx, ly = self._transform(gx, gy, ego_pose)
+        m.pose.position.x  = lx
+        m.pose.position.y  = ly
         m.pose.position.z  = 0.5
         m.pose.orientation.w = 1.0
         m.scale.x = m.scale.y = m.scale.z = 1.2
@@ -122,7 +150,7 @@ class MPPIVisualizer:
         m.color.a = 1.0
         self._goal_pub.publish(m)
 
-    def _pub_chosen_trajectory(self, mppi, stamp) -> None:
+    def _pub_chosen_trajectory(self, mppi, stamp, ego_pose=None) -> None:
         mean_traj = mppi.last_mean_traj   # (H, 4)
         H = mean_traj.shape[0]
         path = Path()
@@ -131,13 +159,14 @@ class MPPIVisualizer:
         for h in range(H):
             ps = PoseStamped()
             ps.header = path.header
-            ps.pose.position.x   = float(mean_traj[h, 0])
-            ps.pose.position.y   = float(mean_traj[h, 1])
+            lx, ly = self._transform(mean_traj[h, 0], mean_traj[h, 1], ego_pose)
+            ps.pose.position.x   = lx
+            ps.pose.position.y   = ly
             ps.pose.orientation.w = 1.0
             path.poses.append(ps)
         self._chosen_pub.publish(path)
 
-    def _pub_sampled_rollouts(self, mppi, stamp) -> None:
+    def _pub_sampled_rollouts(self, mppi, stamp, ego_pose=None) -> None:
         traj = mppi.last_traj      # (K, H, 4)
         w    = mppi.last_weights   # (K,)
         K, H, _ = traj.shape
@@ -166,14 +195,15 @@ class MPPIVisualizer:
             m.pose.orientation.w = 1.0
             for h in range(H):
                 p = Point()
-                p.x = float(traj[k, h, 0])
-                p.y = float(traj[k, h, 1])
+                lx, ly = self._transform(traj[k, h, 0], traj[k, h, 1], ego_pose)
+                p.x = lx
+                p.y = ly
                 m.points.append(p)
             msg.markers.append(m)
 
         self._samples_pub.publish(msg)
 
-    def _pub_obstacle_markers(self, mppi, obstacles: np.ndarray, stamp) -> None:
+    def _pub_obstacle_markers(self, mppi, obstacles: np.ndarray, stamp, ego_pose=None) -> None:
         msg = MarkerArray()
         clear = Marker()
         clear.header.frame_id = self.frame_id
@@ -190,8 +220,9 @@ class MPPIVisualizer:
             m.id              = i + 1
             m.type            = Marker.CYLINDER
             m.action          = Marker.ADD
-            m.pose.position.x  = float(obstacles[i, 0])
-            m.pose.position.y  = float(obstacles[i, 1])
+            lx, ly = self._transform(obstacles[i, 0], obstacles[i, 1], ego_pose)
+            m.pose.position.x  = lx
+            m.pose.position.y  = ly
             m.pose.orientation.w = 1.0
             m.scale.x = m.scale.y = 2.0 * r
             m.scale.z = 0.15
