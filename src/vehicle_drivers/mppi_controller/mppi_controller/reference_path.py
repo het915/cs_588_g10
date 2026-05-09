@@ -39,3 +39,26 @@ class ReferencePath:
         nx, ny = -np.sin(heading), np.cos(heading)
         d = (p[0] - point[0]) * nx + (p[1] - point[1]) * ny
         return point, seg_s, heading, d
+
+    def trim_behind(self, pos, min_points=4):
+        """Return a new ReferencePath with already-passed waypoints removed.
+
+        Finds the segment nearest to `pos`, then returns the path starting
+        from that segment.  Always keeps at least `min_points` waypoints so
+        the returned path is valid and the MPPI has meaningful look-ahead.
+        """
+        _, _, _, _ = self.nearest_point(pos)   # warm path; reuse index logic
+        p = np.asarray(pos, dtype=float)
+        a = self.xy[:-1]
+        b = self.xy[1:]
+        ab = b - a
+        ap = p - a
+        ab_len2 = np.sum(ab * ab, axis=1)
+        ab_len2 = np.where(ab_len2 < 1e-12, 1e-12, ab_len2)
+        t = np.clip(np.sum(ap * ab, axis=1) / ab_len2, 0.0, 1.0)
+        proj = a + (t[:, None] * ab)
+        d2 = np.sum((proj - p) ** 2, axis=1)
+        nearest_seg = int(np.argmin(d2))
+        # Keep from `nearest_seg` onward; clamp so we always have min_points.
+        start = min(nearest_seg, max(0, len(self.xy) - min_points))
+        return ReferencePath(self.xy[start:])

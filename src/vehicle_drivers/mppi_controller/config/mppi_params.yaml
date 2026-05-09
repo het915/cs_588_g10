@@ -1,0 +1,67 @@
+adapt_mppi_node:
+  ros__parameters:
+
+    # --- Vehicle ---------------------------------------------------------
+    rate_hz:               20.0
+    wheelbase:              1.75    # metres, GEM e4
+    offset:                 1.26    # GPS antenna → rear axle (m)
+    origin_lat:            40.0927422
+    origin_lon:           -88.2359639
+    desired_speed:          4.0     # m/s (capped at 5.0 in code)
+    max_throttle:           0.4     # pedal fraction 0–1 (accel_cmd ceiling)
+    max_brake:              0.4     # pedal fraction 0–1 (brake_cmd ceiling)
+    waypoints_csv:         ""       # empty → package default track.csv
+    require_pacmod_enable:  true
+    vehicle_name:          ""
+
+    # --- MPPI ------------------------------------------------------------
+    mppi:
+      K:             500    # rollout samples
+      H:              30    # horizon steps  (total = H × dt seconds)
+      dt:             0.1   # seconds per step
+      sigma_steer:    0.15  # steer noise std (rad)
+      sigma_accel:    0.5   # accel noise std (m/s²)
+      lambda_:        0.1   # temperature — lower = greedier
+      clearance:      1.5   # pedestrian exclusion radius (m)
+      device:        "cpu"  # "" = auto, "cpu", "cuda:0", …
+      w_pos:        15.0    # cross-track distance to reference path
+      w_vel:         5.0    # speed tracking
+      w_curv:        2.0    # stability: |δ|·v
+      w_obs:       150.0    # Gaussian pedestrian repulsion peak
+      w_obs_hard:  250.0    # hard step inside clearance radius
+      w_obs_soft:   40.0    # exponential falloff outside clearance
+      w_cone_hard: 250.0    # hard step inside cone exclusion radius
+      w_cone_soft:  40.0    # exponential falloff outside cone
+      w_terminal:    0.0    # terminal distance-to-goal (0 = disabled)
+      ped_sigma:     1.5    # Gaussian half-width for ped risk (m)
+      cone_radius:   0.8    # cone exclusion radius (m)
+
+    # --- Obstacle source -------------------------------------------------
+    # "raw"       → /fusion_pedestrian_position  (Int32MultiArray, polar)
+    # "predicted" → /pedestrian_predictions_tensor (Float32MultiArray, M×H×2)
+    prediction_source: "raw"
+    cone_topic:        "/cone_positions"
+
+    # --- Speed PID -------------------------------------------------------
+    pid:
+      kp:  2.0
+      ki:  0.0
+      kd:  0.1
+      wg: 10.0    # integral wind-up guard
+
+    # --- Speed low-pass filter -------------------------------------------
+    filter:
+      cutoff: 1.2   # Hz
+      fs:    30.0   # sample rate Hz
+      order:  4     # API-compat, unused — always 1st-order EMA
+
+    # --- Demo obstacles (arc-length fractions along reference path) ------
+    demo:
+      ped_arc_fractions:   [0.8]
+      cone_arc_fractions:  [0.4]
+      cone_lateral_offset:  1.5   # metres left of path heading
+
+    # --- Visualisation ---------------------------------------------------
+    viz:
+      frame_id:    "map"
+      num_samples:  1    # top-N rollouts shown in RViz
