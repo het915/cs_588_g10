@@ -1,0 +1,27 @@
+<launch>
+  <!-- YOLOv11 RGB-D pedestrian detector (rospy).
+       in:  /oak/rgb/image_raw, /oak/stereo/image_raw
+       out: /rgbd_pedestrian_position (Int32MultiArray, polar)
+            /pedestrian_sign_present (Bool)
+            person_3d_marker (Marker)
+            detections/image (Image, debug overlay) -->
+
+  <arg name="model_path" default="$(find yolo_person_detector)/yolo_person_detector/yolo11n.pt"/>
+  <arg name="device"     default="cuda:0"/>
+  <arg name="conf"       default="0.35"/>
+  <arg name="iou"        default="0.45"/>
+  <arg name="image_topic" default="/oak/rgb/image_raw"/>
+  <arg name="depth_topic" default="/oak/stereo/image_raw"/>
+  <arg name="publish_debug_image" default="true"/>
+
+  <node pkg="yolo_person_detector" type="rgbd_pedestrian_detector_ros1.py"
+        name="rgbd_pedestrian_detector" output="screen">
+    <param name="model_path"   value="$(arg model_path)"/>
+    <param name="device"       value="$(arg device)"/>
+    <param name="conf"         value="$(arg conf)"/>
+    <param name="iou"          value="$(arg iou)"/>
+    <param name="image_topic"  value="$(arg image_topic)"/>
+    <param name="depth_topic"  value="$(arg depth_topic)"/>
+    <param name="publish_debug_image" value="$(arg publish_debug_image)"/>
+  </node>
+</launch>

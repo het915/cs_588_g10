@@ -1,0 +1,44 @@
+<launch>
+  <!-- End-to-end ROS 1 perception → diffusion → MPPI on feature/ros1-mppi-port.
+       Brings up:
+         lidar_preprocessor          (adapt_full)        → /lidar_pedestrian_position
+         rgbd_pedestrian_detector    (yolo_person_detector) → /rgbd_pedestrian_position
+         sensor_fusion_node          (adapt_full)        → /fusion_pedestrian_position
+         diffusion_predictor_node    (diffusion_prediction) → /pedestrian_predictions_tensor
+
+       Then run the MPPI sim/full node separately with:
+           rosrun mppi_controller adapt_mppi_node_ros1_sim.py _prediction_source:=predicted
+   -->
+
+  <arg name="enable_lidar"     default="true"/>
+  <arg name="enable_rgbd"      default="true"/>
+  <arg name="enable_fusion"    default="true"/>
+  <arg name="enable_diffusion" default="true"/>
+
+  <arg name="prediction_mode" default="joint"/>
+  <arg name="diffusion_weights"
+       default="$(find diffusion_prediction)/models/diffusion/av2_joint_v2/ema_best.pt"/>
+  <arg name="device" default="cuda:0"/>
+
+  <group if="$(arg enable_lidar)">
+    <include file="$(find adapt_full)/launch/lidar_processing.launch"/>
+  </group>
+
+  <group if="$(arg enable_rgbd)">
+    <include file="$(find yolo_person_detector)/launch/rgbd_pedestrian_detector.launch">
+      <arg name="device" value="$(arg device)"/>
+    </include>
+  </group>
+
+  <group if="$(arg enable_fusion)">
+    <include file="$(find adapt_full)/launch/lidar_camera_fusion.launch"/>
+  </group>
+
+  <group if="$(arg enable_diffusion)">
+    <include file="$(find diffusion_prediction)/launch/diffusion_predictor.launch">
+      <arg name="prediction_mode" value="$(arg prediction_mode)"/>
+      <arg name="weights"         value="$(arg diffusion_weights)"/>
+      <arg name="device"          value="$(arg device)"/>
+    </include>
+  </group>
+</launch>
