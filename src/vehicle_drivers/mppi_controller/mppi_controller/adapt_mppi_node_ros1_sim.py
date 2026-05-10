@@ -15,7 +15,7 @@ Subscribes:
   /insnavgeod                       septentrio_gnss_driver/INSNavGeod
   # /pacmod/enabled                 std_msgs/Bool                    [disabled]
   # /pacmod/vehicle_speed_rpt       pacmod2_msgs/VehicleSpeedRpt     [disabled]
-  /fusion_pedestrian_position       std_msgs/Int32MultiArray
+  /fusion_pedestrian_position       std_msgs/Float32MultiArray
   /pedestrian_predictions_tensor    std_msgs/Float32MultiArray
   /cone_positions                   geometry_msgs/PoseArray
 
@@ -47,7 +47,7 @@ import numpy as np
 import rospy
 import rospkg
 
-from std_msgs.msg import Bool, Float64, Int32MultiArray, Float32MultiArray
+from std_msgs.msg import Bool, Float64, Float32MultiArray
 from sensor_msgs.msg import NavSatFix
 from nav_msgs.msg import Path
 from geometry_msgs.msg import Point, PoseArray, PoseStamped
@@ -497,7 +497,7 @@ class AdaptMPPINode:
             )
         else:
             rospy.Subscriber(
-                '/fusion_pedestrian_position', Int32MultiArray,
+                '/fusion_pedestrian_position', Float32MultiArray,
                 self._ped_cb, queue_size=10,
             )
             rospy.loginfo(
