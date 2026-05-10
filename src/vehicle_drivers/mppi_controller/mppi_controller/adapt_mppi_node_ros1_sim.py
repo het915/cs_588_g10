@@ -6,10 +6,7 @@ base_footprint is broadcast each cycle so RViz can display everything in
 the map frame.
 
 Subscribes:
-  /gazebo/model_states              gazebo_msgs/ModelStates      (primary state)
-  /navsatfix                        sensor_msgs/NavSatFix        (GPS fallback)
-  /insnavgeod                       septentrio_gnss_driver/INSNavGeod (heading fallback)
-  /joint_states                     sensor_msgs/JointState       (speed fallback)
+  /gazebo/model_states              gazebo_msgs/ModelStates
   /move_base_simple/goal            geometry_msgs/PoseStamped    (RViz 2D Nav Goal)
   /fusion_pedestrian_position       std_msgs/Int32MultiArray
   /pedestrian_predictions_tensor    std_msgs/Float32MultiArray
@@ -35,19 +32,11 @@ import rospy
 import tf
 
 from std_msgs.msg import Float64, Int32MultiArray, Float32MultiArray
-from sensor_msgs.msg import NavSatFix, JointState
 from nav_msgs.msg import Path
 from geometry_msgs.msg import Point, PoseArray, PoseStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from ackermann_msgs.msg import AckermannDrive
 from gazebo_msgs.msg import ModelStates
-
-try:
-    from septentrio_gnss_driver.msg import INSNavGeod
-    _HAS_SEPTENTRIO = True
-except ImportError:
-    _HAS_SEPTENTRIO = False
-    INSNavGeod = None
 
 # Support both `python -m mppi_controller.adapt_mppi_node_ros1_sim`
 # (package context — relative import) and `python adapt_mppi_node_ros1_sim.py`
@@ -59,44 +48,10 @@ except ImportError:
     from mppi import MPPI
     from reference_path import ReferencePath
 
+
 # =========================================================================== #
-#  Helpers (inlined from utils.py — rclpy-free)                                 #
+#  Helpers                                                                      #
 # =========================================================================== #
-
-_WGS84_A = 6378137.0
-_WGS84_F = 1.0 / 298.257223563
-_WGS84_E2 = _WGS84_F * (2.0 - _WGS84_F)
-
-
-def _geodetic_to_ecef(lat_deg, lon_deg, h):
-    lat = math.radians(lat_deg)
-    lon = math.radians(lon_deg)
-    sl, cl = math.sin(lat), math.cos(lat)
-    N = _WGS84_A / math.sqrt(1.0 - _WGS84_E2 * sl * sl)
-    return (
-        (N + h) * cl * math.cos(lon),
-        (N + h) * cl * math.sin(lon),
-        (N * (1.0 - _WGS84_E2) + h) * sl,
-    )
-
-
-def geodetic2enu(lat, lon, h, lat0, lon0, h0):
-    x,  y,  z  = _geodetic_to_ecef(lat,  lon,  h)
-    x0, y0, z0 = _geodetic_to_ecef(lat0, lon0, h0)
-    dx, dy, dz = x - x0, y - y0, z - z0
-    slat, clat = math.sin(math.radians(lat0)), math.cos(math.radians(lat0))
-    slon, clon = math.sin(math.radians(lon0)), math.cos(math.radians(lon0))
-    e = -slon * dx + clon * dy
-    n = -slat * clon * dx - slat * slon * dy + clat * dz
-    u =  clat * clon * dx + clat * slon * dy + slat * dz
-    return e, n, u
-
-
-def heading_to_yaw(heading_deg):
-    if heading_deg < 270.0:
-        return math.radians(90.0 - heading_deg)
-    return math.radians(450.0 - heading_deg)
-
 
 def front2steer(f_angle_deg):
     a = max(min(f_angle_deg, 35.0), -35.0)
@@ -320,35 +275,24 @@ class MPPIVisualizer:
 
 class AdaptMPPINode:
     def __init__(self):
-        # rospy.get_param honours nested YAML: ``mppi: {K: 500}`` is reached
-        # via ``rospy.get_param('~mppi/K')``.
         gp = rospy.get_param
 
         # ------------------------------------------------------------------ #
         #  State                                                               #
         # ------------------------------------------------------------------ #
-        self.rate_hz   = float(gp('~rate_hz',   20.0))
-        self.wheelbase = float(gp('~wheelbase',  1.75))
-        self.offset    = float(gp('~offset',     1.26))
-        self.olat      = float(gp('~origin_lat',  40.0927422))
-        self.olon      = float(gp('~origin_lon', -88.2359639))
-        self.desired_speed         = min(5.0, float(gp('~desired_speed', 4.0)))
-        self.max_throttle          = min(1.0, float(gp('~max_throttle',  0.4)))
-        self.max_brake             = min(1.0, float(gp('~max_brake',     0.4)))
-        self.prediction_source     = str(gp('~prediction_source', 'raw'))
-        self.cone_topic            = str(gp('~cone_topic', '/cone_positions'))
+        self.rate_hz          = float(gp('~rate_hz',   20.0))
+        self.wheelbase        = float(gp('~wheelbase',  1.75))
+        self.desired_speed    = min(5.0, float(gp('~desired_speed', 4.0)))
+        self.max_throttle     = min(1.0, float(gp('~max_throttle',  0.4)))
+        self.max_brake        = min(1.0, float(gp('~max_brake',     0.4)))
+        self.prediction_source = str(gp('~prediction_source', 'raw'))
+        self.cone_topic        = str(gp('~cone_topic', '/cone_positions'))
 
-        self.lat = 0.0
-        self.lon = 0.0
-        self.heading      = 0.0
-        self.speed        = 0.0
+        self.speed            = 0.0
         self.ped_trajectories = None
-        self._v_cmd = 0.0
-        self._has_ins_heading   = False
-        self._has_valid_heading = False
-        self._gps_hdg_anchor    = None
+        self._v_cmd           = 0.0
 
-        # Gazebo ground-truth state (sim primary source)
+        # Gazebo ground-truth state
         self._gazebo_model_name = str(gp('~gazebo_model_name', 'gem_e4'))
         self._use_gazebo_state  = False
         self._gz_x   = 0.0
@@ -357,9 +301,7 @@ class AdaptMPPINode:
         # Spawn position recorded on first Gazebo callback — treated as map (0, 0)
         self._origin_x = None
         self._origin_y = None
-        # Gazebo model origin ≠ GPS antenna, so no antenna offset needed
         self._gz_offset = float(gp('~gazebo_offset', 0.0))
-        # Goal-reached threshold (m)
         self._goal_reached_threshold = float(gp('~goal_reached_threshold', 1.0))
 
         # ------------------------------------------------------------------ #
@@ -403,15 +345,11 @@ class AdaptMPPINode:
             order=int(gp('~filter/order', 4)),
         )
 
-        # --- Reference path: built on demand from /goal_pose --
-        # No CSV required. Until the first goal arrives, ref_path is None and
-        # the control loop short-circuits (no MPPI rollout, no viz update).
+        # Reference path built on demand from /move_base_simple/goal.
+        # Control loop short-circuits until the first goal arrives.
         self.ref_path = None
         self._goal_path_samples = int(gp('~goal_path_samples', 50))
 
-        # demo_positions() needs a ref_path; without one, start with empty
-        # obstacle / cone arrays. Real detections still arrive over /cones,
-        # /fusion_pedestrian_position, /pedestrian_predictions_tensor.
         self.obstacles = np.zeros((0, 2), dtype=float)
         self.cones     = np.zeros((0, 2), dtype=float)
 
@@ -428,51 +366,38 @@ class AdaptMPPINode:
         #  Subscribers                                                         #
         # ------------------------------------------------------------------ #
         rospy.Subscriber('/gazebo/model_states', ModelStates, self._gazebo_states_cb, queue_size=10)
-        rospy.Subscriber('/navsatfix', NavSatFix, self._gnss_cb, queue_size=10)
-        if _HAS_SEPTENTRIO:
-            rospy.Subscriber('/insnavgeod', INSNavGeod, self._ins_cb, queue_size=10)
-        else:
-            rospy.logwarn(
-                'septentrio_gnss_driver not found — /insnavgeod heading unavailable'
-            )
-        # Speed from rear wheel joint velocities (replaces PACMOD in sim)
-        rospy.Subscriber('/joint_states', JointState, self._joint_states_cb, queue_size=10)
+
         if self.prediction_source == 'predicted':
             rospy.Subscriber(
                 '/pedestrian_predictions_tensor', Float32MultiArray,
                 self._pred_tensor_cb, queue_size=10,
             )
-            rospy.loginfo(
-                'Obstacle source: /pedestrian_predictions_tensor (full trajectories)'
-            )
+            rospy.loginfo('Obstacle source: /pedestrian_predictions_tensor')
         else:
             rospy.Subscriber(
                 '/fusion_pedestrian_position', Int32MultiArray,
                 self._ped_cb, queue_size=10,
             )
-            rospy.loginfo(
-                'Obstacle source: /fusion_pedestrian_position (raw detections)'
-            )
+            rospy.loginfo('Obstacle source: /fusion_pedestrian_position')
+
         rospy.Subscriber(self.cone_topic, PoseArray, self._cones_cb, queue_size=10)
         rospy.loginfo(f'Cone source: {self.cone_topic}')
 
-        # RViz "2D Nav Goal" publishes here. On each click we rebuild
-        # ref_path as a sampled straight segment (current_pose -> goal).
         rospy.Subscriber(
             '/move_base_simple/goal', PoseStamped,
             self._goal_cb, queue_size=1,
         )
-        rospy.loginfo('Goal source: /move_base_simple/goal (PoseStamped)')
+        rospy.loginfo('Goal source: /move_base_simple/goal')
 
         # ------------------------------------------------------------------ #
-        #  Publishers — control                                                #
+        #  Publishers                                                          #
         # ------------------------------------------------------------------ #
         self.ackermann_pub = rospy.Publisher('/ackermann_cmd', AckermannDrive, queue_size=1)
         self._accel_cmd_value = 0.0
         self._brake_cmd_value = 0.0
 
         # ------------------------------------------------------------------ #
-        #  Timer                                                                #
+        #  Timer                                                               #
         # ------------------------------------------------------------------ #
         rospy.Timer(rospy.Duration(1.0 / self.rate_hz), self._control_loop)
         rospy.loginfo(
@@ -502,45 +427,6 @@ class AdaptMPPINode:
     #  Callbacks                                                               #
     # ---------------------------------------------------------------------- #
 
-    def _gnss_cb(self, msg):
-        new_lat, new_lon = msg.latitude, msg.longitude
-        if not self._has_ins_heading:
-            if self._gps_hdg_anchor is None and (self.lat != 0.0 or self.lon != 0.0):
-                self._gps_hdg_anchor = (self.lat, self.lon)
-            if self._gps_hdg_anchor is not None and self.speed > 0.5:
-                ex0, ey0, _ = geodetic2enu(
-                    self._gps_hdg_anchor[0], self._gps_hdg_anchor[1],
-                    0.0, self.olat, self.olon, 0.0)
-                ex1, ey1, _ = geodetic2enu(
-                    new_lat, new_lon, 0.0, self.olat, self.olon, 0.0)
-                dx, dy = ex1 - ex0, ey1 - ey0
-                if math.hypot(dx, dy) > 2.0:
-                    self.heading = (90.0 - math.degrees(math.atan2(dy, dx))) % 360.0
-                    self._gps_hdg_anchor = (new_lat, new_lon)
-                    self._has_valid_heading = True
-        self.lat = new_lat
-        self.lon = new_lon
-
-    def _ins_cb(self, msg):
-        if math.isnan(msg.heading):
-            return
-        self._has_ins_heading = True
-        self._has_valid_heading = True
-        self.heading = msg.heading
-
-    def _joint_states_cb(self, msg):
-        if self._use_gazebo_state:
-            return  # speed already provided by _gazebo_states_cb
-        _WHEEL_RADIUS = 0.295  # 0.59 m diameter / 2
-        _REAR_JOINTS = {'rear_left_wheel_joint', 'rear_right_wheel_joint'}
-        speeds = [
-            abs(vel) * _WHEEL_RADIUS
-            for name, vel in zip(msg.name, msg.velocity)
-            if name in _REAR_JOINTS
-        ]
-        if speeds:
-            self.speed = float(self.speed_filter.get_data(sum(speeds) / len(speeds)))
-
     def _gazebo_states_cb(self, msg):
         try:
             idx = msg.name.index(self._gazebo_model_name)
@@ -550,7 +436,6 @@ class AdaptMPPINode:
         twist = msg.twist[idx]
         q = pose.orientation
 
-        # Record spawn position as map origin (0, 0) on first callback
         if self._origin_x is None:
             self._origin_x = pose.position.x
             self._origin_y = pose.position.y
@@ -567,10 +452,8 @@ class AdaptMPPINode:
         self.speed = float(self.speed_filter.get_data(
             math.sqrt(twist.linear.x ** 2 + twist.linear.y ** 2)
         ))
-        self._has_valid_heading = True
-        self._use_gazebo_state  = True
+        self._use_gazebo_state = True
 
-        # Broadcast map -> base_footprint so RViz and goal_pose use map frame
         self._tf_br.sendTransform(
             (self._gz_x, self._gz_y, 0.0),
             (q.x, q.y, q.z, q.w),
@@ -581,9 +464,7 @@ class AdaptMPPINode:
 
     def _ped_cb(self, msg):
         data = msg.data
-        if not data or len(data) % 2 != 0:
-            return
-        if self.lat == 0.0 and self.lon == 0.0:
+        if not data or len(data) % 2 != 0 or not self._use_gazebo_state:
             return
         ex, ey, yaw = self._gem_state()
         out = []
@@ -599,7 +480,7 @@ class AdaptMPPINode:
         self.obstacles = np.asarray(out, dtype=float) if out else np.zeros((0, 2))
 
     def _pred_tensor_cb(self, msg):
-        if not msg.data or (self.lat == 0.0 and self.lon == 0.0):
+        if not msg.data or not self._use_gazebo_state:
             self.ped_trajectories = None
             return
         dims = msg.layout.dim
@@ -627,17 +508,9 @@ class AdaptMPPINode:
         )
 
     def _goal_cb(self, msg):
-        """RViz 2D-Nav-Goal -> rebuild ref_path as a sampled straight segment.
-
-        Goal is assumed to be in the same frame as our ENU map (same
-        frame_id the viz uses, default 'map'). The path runs from the
-        vehicle's current (x, y) — or (0, 0) if GNSS hasn't fixed yet —
-        to the clicked (goal.x, goal.y), sampled at N points so MPPI's
-        arc-length lookahead and heading derivatives behave well.
-        """
-        if not self._has_fix():
+        if not self._use_gazebo_state:
             start = np.array([0.0, 0.0])
-            rospy.logwarn('Goal received before state fix — using (0,0) as start')
+            rospy.logwarn('Goal received before Gazebo state — using (0,0) as start')
         else:
             sx, sy, _ = self._gem_state()
             start = np.array([sx, sy])
@@ -658,39 +531,25 @@ class AdaptMPPINode:
         )
 
     # ---------------------------------------------------------------------- #
+    #  State helpers                                                           #
+    # ---------------------------------------------------------------------- #
+
+    def _gem_state(self):
+        x = self._gz_x - self._gz_offset * math.cos(self._gz_yaw)
+        y = self._gz_y - self._gz_offset * math.sin(self._gz_yaw)
+        return x, y, self._gz_yaw
+
+    # ---------------------------------------------------------------------- #
     #  Control loop                                                            #
     # ---------------------------------------------------------------------- #
 
-    def _has_fix(self):
-        return self._use_gazebo_state or (self.lat != 0.0 or self.lon != 0.0)
-
-    def _gem_state(self):
-        if self._use_gazebo_state:
-            x = self._gz_x - self._gz_offset * math.cos(self._gz_yaw)
-            y = self._gz_y - self._gz_offset * math.sin(self._gz_yaw)
-            return x, y, self._gz_yaw
-        local_x, local_y, _ = geodetic2enu(
-            self.lat, self.lon, 0.0, self.olat, self.olon, 0.0
-        )
-        yaw = heading_to_yaw(self.heading)
-        return (
-            local_x - self.offset * math.cos(yaw),
-            local_y - self.offset * math.sin(yaw),
-            yaw,
-        )
-
     def _control_loop(self, _event):
-        if self.ref_path is None:
-            return
-        if not self._has_fix():
-            return
-        if not self._has_valid_heading:
+        if self.ref_path is None or not self._use_gazebo_state:
             return
 
         x, y, yaw = self._gem_state()
         stamp = rospy.Time.now()
 
-        # Stop when within threshold of the goal
         goal = self.ref_path.xy[-1]
         dist_to_goal = float(np.linalg.norm(np.array([x, y]) - goal))
         if dist_to_goal < self._goal_reached_threshold:
@@ -705,8 +564,6 @@ class AdaptMPPINode:
 
         self.viz.append_robot_pose(x, y, yaw, stamp)
 
-        # TODO: Check trim logic. Check the ref path frequency.
-        # active_path = self.ref_path.trim_behind((x, y))
         active_path = self.ref_path
 
         u = self.mppi.update(
