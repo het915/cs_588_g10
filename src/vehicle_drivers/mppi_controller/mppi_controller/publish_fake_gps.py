@@ -20,6 +20,12 @@ Streams at fixed rate (default 10 Hz, --rate):
 Republished every --goal-period s (default 60 s):
   /goal_pose       geometry_msgs/PoseStamped
 
+For native Foxglove rendering of the pedestrian trajectories (the
+Float32MultiArray above is opaque to Foxglove), the same data is
+also published in --viz-frame (default 'map') as:
+  /spoof/viz/ped_trajectories  visualization_msgs/MarkerArray
+                               (LINE_STRIP + SPHERE_LIST per ped)
+
 Defaults are tuned for the project's UIUC GEM Highbay origin:
   lat = 40.0927422 N, lon = -88.2359639 W   (matches mppi_params.yaml)
   heading = 270 deg  (compass: facing WEST in ENU = -x direction)
@@ -38,8 +44,9 @@ import math
 
 import rospy
 from sensor_msgs.msg import NavSatFix
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Point, PoseStamped
 from std_msgs.msg import Float32MultiArray, MultiArrayDimension
+from visualization_msgs.msg import Marker, MarkerArray
 from septentrio_gnss_driver.msg import INSNavGeod
 
 
@@ -96,6 +103,13 @@ def parse_args():
                         'trajectory. Default 0.1 (matches mppi/dt).')
     p.add_argument('--no-obstacle', action='store_true',
                    help='Skip publishing the fake pedestrian.')
+    p.add_argument('--offset', type=float, default=1.26,
+                   help='Vehicle GNSS-to-rear-axle offset (m). Must match '
+                        '~offset on the controller so the spoofed viz aligns '
+                        'with what MPPI sees. Default 1.26.')
+    p.add_argument('--viz-frame', type=str, default='map',
+                   help='Frame for the world-frame viz markers (must match '
+                        '~viz/frame_id on the controller). Default map.')
     return p.parse_args()
 
 
@@ -113,6 +127,13 @@ def main():
     # node transforms to world using the latest GPS+heading.
     ped_pub  = rospy.Publisher('/fusion_pedestrian_position',
                                Float32MultiArray, queue_size=10)
+    # Foxglove-friendly mirror of the trajectories — same data the
+    # controller will compute via _ped_cb's ego->world rotation, but
+    # published as a MarkerArray (one LINE_STRIP + SPHERE_LIST per ped)
+    # in `--viz-frame` so the 3D panel renders it natively without
+    # needing layout.dim awareness.
+    ped_viz_pub = rospy.Publisher('/spoof/viz/ped_trajectories',
+                                  MarkerArray, queue_size=10)
 
     # --- GPS / INS messages -----------------------------------------------
     fix = NavSatFix()
@@ -162,22 +183,81 @@ def main():
 
         For each look-ahead step h in [0, H): time = t_sec + h*horizon_dt,
         x_fwd stays at args.obstacle_distance, y_left is the sine sweep at
-        that time. Returns a flat list of length H*2 in row-major order.
+        that time. Returns both the flat list (length H*2, row-major) for
+        the Float32MultiArray and the H pairs for marker building.
         """
         x_fwd = float(args.obstacle_distance)
         baseline_y = x_fwd * math.tan(math.radians(args.obstacle_bearing))
         amp = args.obstacle_sweep_amplitude
         period = args.obstacle_sweep_period
-        out = []
+        pairs = []
         for h in range(H):
             t_h = t_sec + h * args.horizon_dt
             if amp > 0 and period > 0:
                 y_lat = baseline_y + amp * math.sin(2.0 * math.pi * t_h / period)
             else:
                 y_lat = baseline_y
-            out.append(x_fwd)
-            out.append(y_lat)
+            pairs.append((x_fwd, y_lat))
+        flat = [v for xy in pairs for v in xy]
+        return flat, pairs
+
+    # --- ego->world helpers (match adapt_mppi_node_ros1_sim._gem_state) ---
+    # Spoof vehicle sits exactly at (olat=args.lat, olon=args.lon) with the
+    # given heading. Using the same ENU origin makes local_x=local_y=0;
+    # only the `offset` shift remains:
+    #   ex = -offset * cos(yaw)
+    #   ey = -offset * sin(yaw)
+    veh_ex = -args.offset * math.cos(yaw)
+    veh_ey = -args.offset * math.sin(yaw)
+    cos_y, sin_y = math.cos(yaw), math.sin(yaw)
+
+    def _ego_to_world(ego_pairs):
+        out = []
+        for xe, ye in ego_pairs:
+            wx = cos_y * xe - sin_y * ye + veh_ex
+            wy = sin_y * xe + cos_y * ye + veh_ey
+            out.append((wx, wy))
         return out
+
+    def _build_ped_markers(world_pairs, stamp):
+        msg = MarkerArray()
+        clear = Marker()
+        clear.header.frame_id = args.viz_frame
+        clear.header.stamp    = stamp
+        clear.action          = Marker.DELETEALL
+        msg.markers.append(clear)
+
+        # LINE_STRIP for the trajectory.
+        line = Marker()
+        line.header.frame_id = args.viz_frame
+        line.header.stamp    = stamp
+        line.ns              = 'spoof_ped_traj'
+        line.id              = 1
+        line.type            = Marker.LINE_STRIP
+        line.action          = Marker.ADD
+        line.scale.x         = 0.15
+        line.color.r, line.color.g, line.color.b, line.color.a = 1.0, 0.2, 0.8, 0.9
+        line.pose.orientation.w = 1.0
+        for wx, wy in world_pairs:
+            p = Point(x=float(wx), y=float(wy), z=0.05)
+            line.points.append(p)
+        msg.markers.append(line)
+
+        # SPHERE_LIST so each predicted pose is visible too.
+        spheres = Marker()
+        spheres.header.frame_id = args.viz_frame
+        spheres.header.stamp    = stamp
+        spheres.ns              = 'spoof_ped_traj'
+        spheres.id              = 2
+        spheres.type            = Marker.SPHERE_LIST
+        spheres.action          = Marker.ADD
+        spheres.scale.x = spheres.scale.y = spheres.scale.z = 0.25
+        spheres.color.r, spheres.color.g, spheres.color.b, spheres.color.a = 1.0, 0.2, 0.8, 1.0
+        spheres.pose.orientation.w = 1.0
+        for wx, wy in world_pairs:
+            spheres.points.append(Point(x=float(wx), y=float(wy), z=0.1))
+        msg.markers.append(spheres)
+        return msg
 
     rospy.loginfo(
         f'Fake GPS: ({args.lat:.7f}, {args.lon:.7f}) '
@@ -220,8 +300,11 @@ def main():
         fix_pub.publish(fix)
         ins_pub.publish(ins)
         if not args.no_obstacle:
-            ped_msg.data = _ped_traj_at((now - t0).to_sec())
+            flat, ego_pairs = _ped_traj_at((now - t0).to_sec())
+            ped_msg.data = flat
             ped_pub.publish(ped_msg)
+            world_pairs = _ego_to_world(ego_pairs)
+            ped_viz_pub.publish(_build_ped_markers(world_pairs, now))
 
         if not args.no_goal:
             if last_goal_pub is None or \
