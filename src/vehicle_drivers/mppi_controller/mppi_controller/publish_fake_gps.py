@@ -5,17 +5,23 @@ adapt_mppi_node.
 Streams at fixed rate (default 10 Hz, --rate):
   /navsatfix                   sensor_msgs/NavSatFix
   /insnavgeod                  septentrio_gnss_driver/INSNavGeod
-  /fusion_pedestrian_position  std_msgs/Float32MultiArray  (one fake pedestrian
-                                                          trajectory, M=1
-                                                          obstacles x H poses x
-                                                          2 (x_fwd, y_left) in
-                                                          EGO frame. layout.dim
-                                                          = [M, H, 2]. The
-                                                          pedestrian walks
-                                                          ±--obstacle-sweep-
-                                                          amplitude m sideways
-                                                          across vehicle path
-                                                          over H future steps)
+  /pedestrian_predictions_tensor  std_msgs/Float32MultiArray  (one fake
+                                                             pedestrian
+                                                             trajectory, M=1 x
+                                                             H poses x 2 (x,y)
+                                                             in base_link
+                                                             (x fwd, y left).
+                                                             layout.dim labels
+                                                             = M, H, xy. The
+                                                             pedestrian walks
+                                                             ±--obstacle-sweep-
+                                                             amplitude m
+                                                             sideways across
+                                                             vehicle path over
+                                                             H future steps.
+                                                             Defaults match the
+                                                             diffusion contract
+                                                             H=20, dt=0.25 s.)
 
 Republished every --goal-period s (default 60 s):
   /goal_pose       geometry_msgs/PoseStamped
@@ -90,17 +96,21 @@ def parse_args():
                         '0 = straight ahead, +left). Default 0. The actual '
                         'bearing oscillates around this baseline if '
                         '--obstacle-sweep-amplitude > 0.')
-    p.add_argument('--obstacle-sweep-amplitude', type=float, default=5.0,
+    p.add_argument('--obstacle-sweep-amplitude', type=float, default=7.0,
                    help='Lateral sweep amplitude (m) — the pedestrian walks '
                         'sideways across the vehicle path with this peak '
                         'offset (sine wave). Set 0 for a stationary obstacle.')
-    p.add_argument('--obstacle-sweep-period', type=float, default=8.0,
-                   help='Lateral sweep period (s). Default 8.')
-    p.add_argument('--horizon', type=int, default=30,
-                   help='Number of future poses (H) per pedestrian trajectory.')
-    p.add_argument('--horizon-dt', type=float, default=0.1,
+    p.add_argument('--obstacle-sweep-period', type=float, default=16.0,
+                   help='Lateral sweep period (s). Default 16 — slower '
+                        'than the MPPI 5 s rollout horizon so the predicted '
+                        'segment never spans a full cycle.')
+    p.add_argument('--horizon', type=int, default=20,
+                   help='Number of future poses (H) per pedestrian trajectory. '
+                        'Default 20 matches the diffusion predictor contract.')
+    p.add_argument('--horizon-dt', type=float, default=0.25,
                    help='Time step (s) between successive poses in the '
-                        'trajectory. Default 0.1 (matches mppi/dt).')
+                        'trajectory. Default 0.25 matches the diffusion '
+                        'contract and MPPI._PED_DT.')
     p.add_argument('--no-obstacle', action='store_true',
                    help='Skip publishing the fake pedestrian.')
     p.add_argument('--offset', type=float, default=1.26,
@@ -121,11 +131,10 @@ def main():
     ins_pub  = rospy.Publisher('/insnavgeod', INSNavGeod,   queue_size=10)
     goal_pub = rospy.Publisher('/goal_pose', PoseStamped,
                                queue_size=1)
-    # adapt_mppi_node_ros1_sim subscribes to /fusion_pedestrian_position with
-    # the default `prediction_source: raw`. The Float32MultiArray is flat
-    # [dist_m, bearing_deg, dist_m, bearing_deg, ...] in the EGO frame; the
-    # node transforms to world using the latest GPS+heading.
-    ped_pub  = rospy.Publisher('/fusion_pedestrian_position',
+    # adapt_mppi_node_ros1_sim subscribes to /pedestrian_predictions_tensor.
+    # The Float32MultiArray is row-major (M, H, 2) with (x_fwd, y_left) in
+    # base_link; the node transforms to world using the latest GPS+heading.
+    ped_pub  = rospy.Publisher('/pedestrian_predictions_tensor',
                                Float32MultiArray, queue_size=10)
     # Foxglove-friendly mirror of the trajectories — same data the
     # controller will compute via _ped_cb's ego->world rotation, but
@@ -172,10 +181,11 @@ def main():
     # vehicle's path over the horizon.
     H = max(1, int(args.horizon))
     ped_msg = Float32MultiArray()
+    M = 1
     ped_msg.layout.dim = [
-        MultiArrayDimension(label='obstacles', size=1, stride=H * 2),
-        MultiArrayDimension(label='horizon',   size=H, stride=2),
-        MultiArrayDimension(label='xy',        size=2, stride=1),
+        MultiArrayDimension(label='M',  size=M, stride=M * H * 2),
+        MultiArrayDimension(label='H',  size=H, stride=H * 2),
+        MultiArrayDimension(label='xy', size=2, stride=2),
     ]
 
     def _ped_traj_at(t_sec):
@@ -278,16 +288,16 @@ def main():
                 f'sweeping ±{args.obstacle_sweep_amplitude:.1f} m sideways '
                 f'(period {args.obstacle_sweep_period:.1f} s), '
                 f'H={H} poses @ dt={args.horizon_dt:.2f} s, at '
-                f'{args.rate:.1f} Hz on /fusion_pedestrian_position '
-                f'(Float32MultiArray [M=1, H, 2] ego cartesian)'
+                f'{args.rate:.1f} Hz on /pedestrian_predictions_tensor '
+                f'(Float32MultiArray [M=1, H, 2] base_link)'
             )
         else:
             rospy.loginfo(
                 f'Obstacle: {args.obstacle_distance:.1f} m, '
-                f'{args.obstacle_bearing:.1f} deg bearing (ego frame, '
+                f'{args.obstacle_bearing:.1f} deg bearing (base_link, '
                 f'stationary), H={H} poses — republished at '
-                f'{args.rate:.1f} Hz on /fusion_pedestrian_position '
-                f'(Float32MultiArray [M=1, H, 2] ego cartesian)'
+                f'{args.rate:.1f} Hz on /pedestrian_predictions_tensor '
+                f'(Float32MultiArray [M=1, H, 2] base_link)'
             )
 
     rate = rospy.Rate(args.rate)
