@@ -1,0 +1,45 @@
+# Noetic image for import/runtime testing of
+# adapt_mppi_node_ros1_sim.py (the PACMOD-LESS sim variant).
+#
+# Base: osrf/ros:noetic-desktop-full (already pulled locally — saves a
+# fresh download — and gives RViz for inspecting the node's viz topics).
+#
+# Adds (on top of desktop-full):
+#   - septentrio_gnss_driver (for INSNavGeod — not in desktop-full)
+#   - ackermann_msgs (drive command published by the sim node)
+#   - gazebo_msgs (ModelStates source for ego state — usually in
+#     desktop-full but pinned explicitly so a slimmer base wouldn't break)
+#   - foxglove-bridge (WebSocket bridge for Foxglove Studio)
+#   - rospkg + pip (Python tooling)
+#   - numpy, torch (CPU build), pytorch-mppi (MPPI math)
+#
+# Notably absent (intentional, per the sim variant):
+#   - any pacmod_msgs / pacmod2_msgs / pacmod3_msgs package
+FROM osrf/ros:noetic-desktop-full
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-pip \
+        python3-rospkg \
+        ros-noetic-septentrio-gnss-driver \
+        ros-noetic-foxglove-bridge \
+        ros-noetic-ackermann-msgs \
+        ros-noetic-gazebo-msgs \
+    && rm -rf /var/lib/apt/lists/*
+
+# CUDA torch (cu121 wheel, ~2 GB; needs `--gpus all` on docker run + an
+# nvidia-container-toolkit host install). torch 2.4.x is the last release
+# that still ships py3.8 wheels — Noetic's Python is 3.8.10.
+# typing-extensions ≥4.13 and numpy ≥2 both dropped 3.8 — pin before
+# installing torch so the resolver doesn't pull incompatible versions.
+RUN pip3 install --no-cache-dir 'typing-extensions<4.13' 'numpy<2' \
+ && pip3 install --no-cache-dir --index-url https://download.pytorch.org/whl/cu121 torch \
+ && pip3 install --no-cache-dir pytorch-mppi
+
+# Source ROS for every interactive bash so `rostopic`, etc. work out of the box.
+RUN echo "source /opt/ros/noetic/setup.bash" >> /etc/bash.bashrc
+
+WORKDIR /workspace
+
+CMD ["bash"]

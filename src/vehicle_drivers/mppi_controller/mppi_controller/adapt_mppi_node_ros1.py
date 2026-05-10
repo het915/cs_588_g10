@@ -416,7 +416,17 @@ class AdaptMPPINode:
         # ------------------------------------------------------------------ #
         #  MPPI + helpers                                                      #
         # ------------------------------------------------------------------ #
-        device_param = str(gp('~mppi/device', 'cpu')).strip() or None
+        # Auto-detect when ~mppi/device is unset or 'auto': prefer cuda when
+        # torch reports it available, otherwise cpu. Explicit 'cpu' / 'cuda'
+        # / 'cuda:0' values from rosparam are passed through unchanged.
+        _device_raw = str(gp('~mppi/device', 'auto')).strip().lower()
+        if _device_raw in ('', 'auto'):
+            try:
+                import torch as _torch
+                _device_raw = 'cuda' if _torch.cuda.is_available() else 'cpu'
+            except Exception:
+                _device_raw = 'cpu'
+        device_param = _device_raw
         self.mppi = MPPI(
             K=int(gp('~mppi/K', 500)),
             H=int(gp('~mppi/H', 30)),
