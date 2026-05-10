@@ -6,11 +6,16 @@ Streams at fixed rate (default 10 Hz, --rate):
   /navsatfix                   sensor_msgs/NavSatFix
   /insnavgeod                  septentrio_gnss_driver/INSNavGeod
   /fusion_pedestrian_position  std_msgs/Float32MultiArray  (one fake pedestrian
-                                                          --obstacle-distance m
-                                                          ahead, walking
+                                                          trajectory, M=1
+                                                          obstacles x H poses x
+                                                          2 (x_fwd, y_left) in
+                                                          EGO frame. layout.dim
+                                                          = [M, H, 2]. The
+                                                          pedestrian walks
                                                           ±--obstacle-sweep-
                                                           amplitude m sideways
-                                                          across vehicle path)
+                                                          across vehicle path
+                                                          over H future steps)
 
 Republished every --goal-period s (default 60 s):
   /goal_pose       geometry_msgs/PoseStamped
@@ -34,7 +39,7 @@ import math
 import rospy
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import PoseStamped
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32MultiArray, MultiArrayDimension
 from septentrio_gnss_driver.msg import INSNavGeod
 
 
@@ -84,6 +89,11 @@ def parse_args():
                         'offset (sine wave). Set 0 for a stationary obstacle.')
     p.add_argument('--obstacle-sweep-period', type=float, default=8.0,
                    help='Lateral sweep period (s). Default 8.')
+    p.add_argument('--horizon', type=int, default=30,
+                   help='Number of future poses (H) per pedestrian trajectory.')
+    p.add_argument('--horizon-dt', type=float, default=0.1,
+                   help='Time step (s) between successive poses in the '
+                        'trajectory. Default 0.1 (matches mppi/dt).')
     p.add_argument('--no-obstacle', action='store_true',
                    help='Skip publishing the fake pedestrian.')
     return p.parse_args()
@@ -134,33 +144,40 @@ def main():
     goal.pose.orientation.z = math.sin(half)
     goal.pose.orientation.w = math.cos(half)
 
-    # --- Fake pedestrian: ego-frame polar (dist_m, bearing_deg) -----------
-    # Int32MultiArray, flat [d, brg, d, brg, ...]. One pedestrian, updated
-    # every tick by _ped_polar_at(t) so the obstacle walks sideways across
-    # the vehicle's path (sine sweep).
+    # --- Fake pedestrian: per-obstacle trajectory in EGO cartesian --------
+    # Float32MultiArray, layout.dim = [M, H, 2] with (x_fwd, y_left). One
+    # pedestrian (M=1), H future poses, sampled at --horizon-dt. The lateral
+    # offset is a sine sweep so the obstacle walks sideways across the
+    # vehicle's path over the horizon.
+    H = max(1, int(args.horizon))
     ped_msg = Float32MultiArray()
-    ped_msg.data = [float(args.obstacle_distance),
-                    float(args.obstacle_bearing)]
+    ped_msg.layout.dim = [
+        MultiArrayDimension(label='obstacles', size=1, stride=H * 2),
+        MultiArrayDimension(label='horizon',   size=H, stride=2),
+        MultiArrayDimension(label='xy',        size=2, stride=1),
+    ]
 
-    def _ped_polar_at(t_sec):
-        """Polar (dist_m, bearing_deg) for the obstacle at sim time t_sec.
+    def _ped_traj_at(t_sec):
+        """Trajectory shape (H, 2) in EGO frame (x_fwd_m, y_left_m).
 
-        Forward distance stays at args.obstacle_distance; lateral offset is a
-        sine sweep with --obstacle-sweep-amplitude metres at
-        --obstacle-sweep-period seconds. Bearing is then atan2(y_lat, x_fwd)
-        and distance is sqrt(x_fwd^2 + y_lat^2).
+        For each look-ahead step h in [0, H): time = t_sec + h*horizon_dt,
+        x_fwd stays at args.obstacle_distance, y_left is the sine sweep at
+        that time. Returns a flat list of length H*2 in row-major order.
         """
         x_fwd = float(args.obstacle_distance)
         baseline_y = x_fwd * math.tan(math.radians(args.obstacle_bearing))
-        if args.obstacle_sweep_amplitude > 0 and args.obstacle_sweep_period > 0:
-            y_lat = baseline_y + args.obstacle_sweep_amplitude * math.sin(
-                2.0 * math.pi * t_sec / args.obstacle_sweep_period
-            )
-        else:
-            y_lat = baseline_y
-        d = math.sqrt(x_fwd * x_fwd + y_lat * y_lat)
-        b = math.degrees(math.atan2(y_lat, x_fwd))
-        return d, b
+        amp = args.obstacle_sweep_amplitude
+        period = args.obstacle_sweep_period
+        out = []
+        for h in range(H):
+            t_h = t_sec + h * args.horizon_dt
+            if amp > 0 and period > 0:
+                y_lat = baseline_y + amp * math.sin(2.0 * math.pi * t_h / period)
+            else:
+                y_lat = baseline_y
+            out.append(x_fwd)
+            out.append(y_lat)
+        return out
 
     rospy.loginfo(
         f'Fake GPS: ({args.lat:.7f}, {args.lon:.7f}) '
@@ -179,15 +196,18 @@ def main():
             rospy.loginfo(
                 f'Obstacle: {args.obstacle_distance:.1f} m forward, '
                 f'sweeping ±{args.obstacle_sweep_amplitude:.1f} m sideways '
-                f'(period {args.obstacle_sweep_period:.1f} s) at '
-                f'{args.rate:.1f} Hz on /fusion_pedestrian_position'
+                f'(period {args.obstacle_sweep_period:.1f} s), '
+                f'H={H} poses @ dt={args.horizon_dt:.2f} s, at '
+                f'{args.rate:.1f} Hz on /fusion_pedestrian_position '
+                f'(Float32MultiArray [M=1, H, 2] ego cartesian)'
             )
         else:
             rospy.loginfo(
                 f'Obstacle: {args.obstacle_distance:.1f} m, '
                 f'{args.obstacle_bearing:.1f} deg bearing (ego frame, '
-                f'stationary) — republished at {args.rate:.1f} Hz on '
-                f'/fusion_pedestrian_position'
+                f'stationary), H={H} poses — republished at '
+                f'{args.rate:.1f} Hz on /fusion_pedestrian_position '
+                f'(Float32MultiArray [M=1, H, 2] ego cartesian)'
             )
 
     rate = rospy.Rate(args.rate)
@@ -200,8 +220,7 @@ def main():
         fix_pub.publish(fix)
         ins_pub.publish(ins)
         if not args.no_obstacle:
-            d, b = _ped_polar_at((now - t0).to_sec())
-            ped_msg.data = [float(d), float(b)]
+            ped_msg.data = _ped_traj_at((now - t0).to_sec())
             ped_pub.publish(ped_msg)
 
         if not args.no_goal:
