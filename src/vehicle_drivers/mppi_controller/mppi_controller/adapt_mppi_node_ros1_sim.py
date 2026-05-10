@@ -15,7 +15,6 @@ Subscribes:
   /insnavgeod                       septentrio_gnss_driver/INSNavGeod
   # /pacmod/enabled                 std_msgs/Bool                    [disabled]
   # /pacmod/vehicle_speed_rpt       pacmod2_msgs/VehicleSpeedRpt     [disabled]
-  /fusion_pedestrian_position       std_msgs/Float32MultiArray
   /pedestrian_predictions_tensor    std_msgs/Float32MultiArray
   /cone_positions                   geometry_msgs/PoseArray
 
@@ -404,7 +403,6 @@ class AdaptMPPINode:
         self.max_throttle          = min(1.0, float(gp('~max_throttle',  0.4)))
         self.max_brake             = min(1.0, float(gp('~max_brake',     0.4)))
         # self.require_pacmod_enable = bool(gp('~require_pacmod_enable',  True))  # PACMOD DISABLED
-        self.prediction_source     = str(gp('~prediction_source', 'raw'))
         self.cone_topic            = str(gp('~cone_topic', '/cone_positions'))
 
         self.lat = 0.0
@@ -487,22 +485,13 @@ class AdaptMPPINode:
         # rospy.Subscriber(
         #     '/pacmod/vehicle_speed_rpt', VehicleSpeedRpt, self._speed_cb, queue_size=10,
         # )
-        if self.prediction_source == 'predicted':
-            rospy.Subscriber(
-                '/pedestrian_predictions_tensor', Float32MultiArray,
-                self._pred_tensor_cb, queue_size=10,
-            )
-            rospy.loginfo(
-                'Obstacle source: /pedestrian_predictions_tensor (full trajectories)'
-            )
-        else:
-            rospy.Subscriber(
-                '/fusion_pedestrian_position', Float32MultiArray,
-                self._ped_cb, queue_size=10,
-            )
-            rospy.loginfo(
-                'Obstacle source: /fusion_pedestrian_position (raw detections)'
-            )
+        rospy.Subscriber(
+            '/pedestrian_predictions_tensor', Float32MultiArray,
+            self._pred_tensor_cb, queue_size=10,
+        )
+        rospy.loginfo(
+            'Obstacle source: /pedestrian_predictions_tensor (full trajectories)'
+        )
         rospy.Subscriber(self.cone_topic, PoseArray, self._cones_cb, queue_size=10)
         rospy.loginfo(f'Cone source: {self.cone_topic}')
 
@@ -608,34 +597,6 @@ class AdaptMPPINode:
     #
     # def _speed_cb(self, msg):
     #     self.speed = float(self.speed_filter.get_data(msg.vehicle_speed))
-
-    def _ped_cb(self, msg):
-        """Per-obstacle trajectories in EGO cartesian (x_fwd, y_left).
-
-        Float32MultiArray with layout.dim = [M, H, 2]. Same shape as
-        /pedestrian_predictions_tensor — we rotate+translate into world
-        and feed self.ped_trajectories, so MPPI uses the trajectory
-        cost path (not the single-snapshot obstacle cost path).
-        """
-        if not msg.data or (self.lat == 0.0 and self.lon == 0.0):
-            self.ped_trajectories = None
-            return
-        dims = msg.layout.dim
-        if len(dims) < 2:
-            self.ped_trajectories = None
-            return
-        M, H = dims[0].size, dims[1].size
-        if M == 0 or H == 0:
-            self.ped_trajectories = None
-            return
-        arr = np.array(msg.data, dtype=np.float32).reshape(M, H, 2)
-        ex, ey, yaw = self._gem_state()
-        cos_y, sin_y = math.cos(yaw), math.sin(yaw)
-        world = np.empty_like(arr)
-        world[:, :, 0] = cos_y * arr[:, :, 0] - sin_y * arr[:, :, 1] + ex
-        world[:, :, 1] = sin_y * arr[:, :, 0] + cos_y * arr[:, :, 1] + ey
-        self.ped_trajectories = world
-        self.obstacles = np.zeros((0, 2), dtype=float)
 
     def _pred_tensor_cb(self, msg):
         if not msg.data or (self.lat == 0.0 and self.lon == 0.0):
