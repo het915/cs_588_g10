@@ -5,7 +5,7 @@ adapt_mppi_node.
 Streams at fixed rate (default 10 Hz, --rate):
   /navsatfix                   sensor_msgs/NavSatFix
   /insnavgeod                  septentrio_gnss_driver/INSNavGeod
-  /fusion_pedestrian_position  std_msgs/Int32MultiArray  (one fake pedestrian
+  /fusion_pedestrian_position  std_msgs/Float32MultiArray  (one fake pedestrian
                                                           --obstacle-distance m
                                                           ahead, walking
                                                           ±--obstacle-sweep-
@@ -34,7 +34,7 @@ import math
 import rospy
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import PoseStamped
-from std_msgs.msg import Int32MultiArray
+from std_msgs.msg import Float32MultiArray
 from septentrio_gnss_driver.msg import INSNavGeod
 
 
@@ -98,11 +98,11 @@ def main():
     goal_pub = rospy.Publisher('/goal_pose', PoseStamped,
                                queue_size=1)
     # adapt_mppi_node_ros1_sim subscribes to /fusion_pedestrian_position with
-    # the default `prediction_source: raw`. The Int32MultiArray is flat
+    # the default `prediction_source: raw`. The Float32MultiArray is flat
     # [dist_m, bearing_deg, dist_m, bearing_deg, ...] in the EGO frame; the
     # node transforms to world using the latest GPS+heading.
     ped_pub  = rospy.Publisher('/fusion_pedestrian_position',
-                               Int32MultiArray, queue_size=10)
+                               Float32MultiArray, queue_size=10)
 
     # --- GPS / INS messages -----------------------------------------------
     fix = NavSatFix()
@@ -138,9 +138,9 @@ def main():
     # Int32MultiArray, flat [d, brg, d, brg, ...]. One pedestrian, updated
     # every tick by _ped_polar_at(t) so the obstacle walks sideways across
     # the vehicle's path (sine sweep).
-    ped_msg = Int32MultiArray()
-    ped_msg.data = [int(round(args.obstacle_distance)),
-                    int(round(args.obstacle_bearing))]
+    ped_msg = Float32MultiArray()
+    ped_msg.data = [float(args.obstacle_distance),
+                    float(args.obstacle_bearing)]
 
     def _ped_polar_at(t_sec):
         """Polar (dist_m, bearing_deg) for the obstacle at sim time t_sec.
@@ -201,7 +201,7 @@ def main():
         ins_pub.publish(ins)
         if not args.no_obstacle:
             d, b = _ped_polar_at((now - t0).to_sec())
-            ped_msg.data = [int(round(d)), int(round(b))]
+            ped_msg.data = [float(d), float(b)]
             ped_pub.publish(ped_msg)
 
         if not args.no_goal:
