@@ -1,33 +1,22 @@
-"""Adapt MPPI node — ROS1 (rospy) interface, PACMOD-LESS sim variant.
+"""Adapt MPPI node — ROS1 (rospy) interface for POLARIS_GEM_Simulator.
 
-For use in the POLARIS_GEM_Simulator, which has no PACMod CAN-bridge.
-Every line touching ``pacmod2_msgs`` is commented out; MPPI math and
-visualisation still run, so RViz can show the chosen rollout, samples,
-obstacles, and reference path while the gazebo vehicle is driven by
-another controller (or manually).
-
-For real-vehicle drive output, see the sibling file
-``adapt_mppi_node_ros1.py`` — identical except the pacmod blocks
-are live there.
+State is read from Gazebo ground truth (/gazebo/model_states). Spawn
+position is used as the map (0, 0) origin. A TF transform map →
+base_footprint is broadcast each cycle so RViz can display everything in
+the map frame.
 
 Subscribes:
-  /navsatfix                        sensor_msgs/NavSatFix
-  /insnavgeod                       septentrio_gnss_driver/INSNavGeod
-  # /pacmod/enabled                 std_msgs/Bool                    [disabled]
-  # /pacmod/vehicle_speed_rpt       pacmod2_msgs/VehicleSpeedRpt     [disabled]
+  /gazebo/model_states              gazebo_msgs/ModelStates      (primary state)
+  /navsatfix                        sensor_msgs/NavSatFix        (GPS fallback)
+  /insnavgeod                       septentrio_gnss_driver/INSNavGeod (heading fallback)
+  /joint_states                     sensor_msgs/JointState       (speed fallback)
+  /move_base_simple/goal            geometry_msgs/PoseStamped    (RViz 2D Nav Goal)
   /fusion_pedestrian_position       std_msgs/Int32MultiArray
   /pedestrian_predictions_tensor    std_msgs/Float32MultiArray
   /cone_positions                   geometry_msgs/PoseArray
 
-Publishes (control) — ALL DISABLED in this sim variant:
-  # /pacmod/global_cmd              pacmod2_msgs/GlobalCmd
-  # /pacmod/shift_cmd               pacmod2_msgs/SystemCmdInt
-  # /pacmod/brake_cmd               pacmod2_msgs/SystemCmdFloat
-  # /pacmod/accel_cmd               pacmod2_msgs/SystemCmdFloat
-  # /pacmod/turn_cmd                pacmod2_msgs/SystemCmdInt
-  # /pacmod/steering_cmd            pacmod2_msgs/PositionWithSpeed
-
-Publishes (viz):
+Publishes:
+  /ackermann_cmd                    ackermann_msgs/AckermannDrive
   /adapt/viz/reference_path         nav_msgs/Path                (latched)
   /adapt/viz/current_goal           visualization_msgs/Marker    (latched)
   /adapt/viz/chosen_trajectory      nav_msgs/Path
@@ -38,32 +27,20 @@ Publishes (viz):
   /adapt/viz/debug/delta            std_msgs/Float64
 """
 import colorsys
-import csv
 import math
-import os
 
 import numpy as np
 
 import rospy
-import rospkg
 import tf
 
-from std_msgs.msg import Bool, Float64, Int32MultiArray, Float32MultiArray
+from std_msgs.msg import Float64, Int32MultiArray, Float32MultiArray
 from sensor_msgs.msg import NavSatFix, JointState
 from nav_msgs.msg import Path
 from geometry_msgs.msg import Point, PoseArray, PoseStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from ackermann_msgs.msg import AckermannDrive
 from gazebo_msgs.msg import ModelStates
-
-# --- PACMOD DISABLED for sim variant -----------------------------------
-# pacmod2_msgs is dual-build (catkin under ROS1, ament under ROS2 via
-# package.xml condition="$ROS_VERSION == ..." tags) — same package name in
-# both. Fields verified identical between the ROS1/ROS2 builds.
-# from pacmod2_msgs.msg import (
-#     GlobalCmd, PositionWithSpeed, SystemCmdFloat, SystemCmdInt,
-#     VehicleSpeedRpt,
-# )
 
 try:
     from septentrio_gnss_driver.msg import INSNavGeod
@@ -81,9 +58,6 @@ try:
 except ImportError:
     from mppi import MPPI
     from reference_path import ReferencePath
-
-_DISABLE_DRIVE_COMMANDS = True
-
 
 # =========================================================================== #
 #  Helpers (inlined from utils.py — rclpy-free)                                 #
@@ -170,51 +144,6 @@ class OnlineFilter:
             self.alpha * x + (1.0 - self.alpha) * self._y
         )
         return self._y
-
-
-def default_waypoints_path():
-    pkg_path = rospkg.RosPack().get_path('adapt_full')
-    return os.path.join(pkg_path, 'waypoints', 'track.csv')
-
-
-def load_waypoints(path, olat, olon):
-    lon_x, lat_y = [], []
-    with open(path) as f:
-        for row in csv.reader(f):
-            if not row:
-                continue
-            lon_x.append(float(row[0]))
-            lat_y.append(float(row[1]))
-    pts = []
-    for lon, lat in zip(lon_x, lat_y):
-        x, y, _ = geodetic2enu(lat, lon, 0.0, olat, olon, 0.0)
-        pts.append((x, y))
-    if len(pts) < 2:
-        raise RuntimeError(f'waypoints file {path} has <2 points')
-    return ReferencePath(pts)
-
-
-def demo_positions(ref_path, fracs, lateral=0.0):
-    if not fracs:
-        return np.zeros((0, 2), dtype=float)
-    s_vals   = ref_path.s
-    xy       = ref_path.xy
-    headings = ref_path.headings
-    total    = ref_path.total_length
-    pts = []
-    for f in fracs:
-        s   = float(f) * total
-        idx = int(np.searchsorted(s_vals, s, side='right')) - 1
-        idx = int(np.clip(idx, 0, len(xy) - 2))
-        ds  = s - s_vals[idx]
-        seg = xy[idx + 1] - xy[idx]
-        seg_len = float(np.linalg.norm(seg))
-        t   = ds / seg_len if seg_len > 1e-6 else 0.0
-        pt  = xy[idx] + t * seg
-        h   = headings[idx]
-        pt  = pt + lateral * np.array([-math.sin(h), math.cos(h)])
-        pts.append(pt)
-    return np.array(pts, dtype=float)
 
 
 # =========================================================================== #
@@ -406,7 +335,6 @@ class AdaptMPPINode:
         self.desired_speed         = min(5.0, float(gp('~desired_speed', 4.0)))
         self.max_throttle          = min(1.0, float(gp('~max_throttle',  0.4)))
         self.max_brake             = min(1.0, float(gp('~max_brake',     0.4)))
-        # self.require_pacmod_enable = bool(gp('~require_pacmod_enable',  True))  # PACMOD DISABLED
         self.prediction_source     = str(gp('~prediction_source', 'raw'))
         self.cone_topic            = str(gp('~cone_topic', '/cone_positions'))
 
@@ -531,10 +459,10 @@ class AdaptMPPINode:
         # RViz "2D Nav Goal" publishes here. On each click we rebuild
         # ref_path as a sampled straight segment (current_pose -> goal).
         rospy.Subscriber(
-            '/goal_pose', PoseStamped,
+            '/move_base_simple/goal', PoseStamped,
             self._goal_cb, queue_size=1,
         )
-        rospy.loginfo('Goal source: /goal_pose (PoseStamped)')
+        rospy.loginfo('Goal source: /move_base_simple/goal (PoseStamped)')
 
         # ------------------------------------------------------------------ #
         #  Publishers — control                                                #
@@ -549,7 +477,7 @@ class AdaptMPPINode:
         rospy.Timer(rospy.Duration(1.0 / self.rate_hz), self._control_loop)
         rospy.loginfo(
             f'adapt_mppi_node_sim ready — {self.rate_hz:.1f} Hz, '
-            f'v_ref={self.desired_speed:.1f} m/s — waiting for /goal_pose'
+            f'v_ref={self.desired_speed:.1f} m/s — waiting for /move_base_simple/goal'
         )
 
     # ---------------------------------------------------------------------- #
@@ -751,26 +679,7 @@ class AdaptMPPINode:
             yaw,
         )
 
-    # --- PACMOD DISABLED for sim variant ---------------------------------
-    # def _prime_pacmod(self):
-    #     self.global_cmd.enable = True
-    #     self.global_cmd.clear_override = True
-    #     self.global_pub.publish(self.global_cmd)
-    #     self.gear_cmd.command = 3
-    #     self.gear_pub.publish(self.gear_cmd)
-    #     self.brake_cmd.command = 0.0
-    #     self.brake_pub.publish(self.brake_cmd)
-    #     self.accel_cmd.command = 0.0
-    #     self.accel_pub.publish(self.accel_cmd)
-    #     self.turn_cmd.command = 1
-    #     self.turn_pub.publish(self.turn_cmd)
-    #     self._pacmod_primed = True
-    #     rospy.logwarn('PACMod primed: enable + FORWARD')
-
     def _control_loop(self, _event):
-        # --- PACMOD DISABLED: enable gate + priming skipped ----------------
-        # if self.require_pacmod_enable and not self.pacmod_enable:
-        #     return
         if self.ref_path is None:
             return
         if not self._has_fix():
@@ -810,7 +719,6 @@ class AdaptMPPINode:
         accel = float(u[1])
 
         sw_deg = front2steer(math.degrees(delta))
-        # self.steer_cmd.angular_position = math.radians(sw_deg)   # PACMOD DISABLED
 
         self._v_cmd = max(
             0.0,
