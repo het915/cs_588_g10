@@ -610,23 +610,32 @@ class AdaptMPPINode:
     #     self.speed = float(self.speed_filter.get_data(msg.vehicle_speed))
 
     def _ped_cb(self, msg):
-        data = msg.data
-        if not data or len(data) % 2 != 0:
+        """Per-obstacle trajectories in EGO cartesian (x_fwd, y_left).
+
+        Float32MultiArray with layout.dim = [M, H, 2]. Same shape as
+        /pedestrian_predictions_tensor — we rotate+translate into world
+        and feed self.ped_trajectories, so MPPI uses the trajectory
+        cost path (not the single-snapshot obstacle cost path).
+        """
+        if not msg.data or (self.lat == 0.0 and self.lon == 0.0):
+            self.ped_trajectories = None
             return
-        if self.lat == 0.0 and self.lon == 0.0:
+        dims = msg.layout.dim
+        if len(dims) < 2:
+            self.ped_trajectories = None
             return
+        M, H = dims[0].size, dims[1].size
+        if M == 0 or H == 0:
+            self.ped_trajectories = None
+            return
+        arr = np.array(msg.data, dtype=np.float32).reshape(M, H, 2)
         ex, ey, yaw = self._gem_state()
-        out = []
-        for i in range(0, len(data), 2):
-            dist = float(data[i])
-            rad  = math.radians(float(data[i + 1]))
-            xe   = dist * math.cos(rad)
-            ye   = dist * math.sin(rad)
-            out.append((
-                ex + xe * math.cos(yaw) - ye * math.sin(yaw),
-                ey + xe * math.sin(yaw) + ye * math.cos(yaw),
-            ))
-        self.obstacles = np.asarray(out, dtype=float) if out else np.zeros((0, 2))
+        cos_y, sin_y = math.cos(yaw), math.sin(yaw)
+        world = np.empty_like(arr)
+        world[:, :, 0] = cos_y * arr[:, :, 0] - sin_y * arr[:, :, 1] + ex
+        world[:, :, 1] = sin_y * arr[:, :, 0] + cos_y * arr[:, :, 1] + ey
+        self.ped_trajectories = world
+        self.obstacles = np.zeros((0, 2), dtype=float)
 
     def _pred_tensor_cb(self, msg):
         if not msg.data or (self.lat == 0.0 and self.lon == 0.0):
