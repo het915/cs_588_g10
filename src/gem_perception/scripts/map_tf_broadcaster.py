@@ -33,29 +33,61 @@ def main():
     
     while not rospy.is_shutdown():
         try:
-            t = TransformStamped()
-            t.header.stamp = rospy.Time.now()
-            t.header.frame_id = world_frame
-            t.child_frame_id = map_frame
+            # Transform: world → map (static)
+            t1 = TransformStamped()
+            t1.header.stamp = rospy.Time.now()
+            t1.header.frame_id = world_frame
+            t1.child_frame_id = map_frame
             
-            # Gazebo初期位置をmapフレーム原点として設定
-            # world座標からmap座標への変換は負のオフセット
-            t.transform.translation.x = -gazebo_x
-            t.transform.translation.y = -gazebo_y
-            t.transform.translation.z = 0.0
+            t1.transform.translation.x = -gazebo_x
+            t1.transform.translation.y = -gazebo_y
+            t1.transform.translation.z = 0.0
             
-            # Quaternion変換（yaw角度）
             half_yaw = -gazebo_yaw / 2.0
-            t.transform.rotation.x = 0.0
-            t.transform.rotation.y = 0.0
-            t.transform.rotation.z = math.sin(half_yaw)
-            t.transform.rotation.w = math.cos(half_yaw)
+            t1.transform.rotation.x = 0.0
+            t1.transform.rotation.y = 0.0
+            t1.transform.rotation.z = math.sin(half_yaw)
+            t1.transform.rotation.w = math.cos(half_yaw)
             
-            br.sendTransform(t)
+            br.sendTransform(t1)
+            
+            # Transform 2: map → base_footprint (identity, connects to robot tree)
+            t2 = TransformStamped()
+            t2.header.stamp = rospy.Time.now()
+            t2.header.frame_id = map_frame
+            t2.child_frame_id = "base_footprint"
+            
+            t2.transform.translation.x = 0.0
+            t2.transform.translation.y = 0.0
+            t2.transform.translation.z = 0.0
+            
+            t2.transform.rotation.x = 0.0
+            t2.transform.rotation.y = 0.0
+            t2.transform.rotation.z = 0.0
+            t2.transform.rotation.w = 1.0
+            
+            br.sendTransform(t2)
+            
+            # Transform 3: base_footprint → base_link (identity, standard robot frame)
+            t3 = TransformStamped()
+            t3.header.stamp = rospy.Time.now()
+            t3.header.frame_id = "base_footprint"
+            t3.child_frame_id = "base_link"
+            
+            t3.transform.translation.x = 0.0
+            t3.transform.translation.y = 0.0
+            t3.transform.translation.z = 0.0
+            
+            t3.transform.rotation.x = 0.0
+            t3.transform.rotation.y = 0.0
+            t3.transform.rotation.z = 0.0
+            t3.transform.rotation.w = 1.0
+            
+            br.sendTransform(t3)
             
             count += 1
             if count % 50 == 0:
-                rospy.logdebug(f"TF: {world_frame}→{map_frame} broadcast @ {t.header.stamp}")
+                rospy.logdebug(f"TF: {world_frame}→{map_frame} @ {t1.header.stamp}")
             
             rate.sleep()
             
