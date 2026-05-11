@@ -1,0 +1,26 @@
+# Core ML/CV
+torch==2.0.1
+torchvision==0.15.2
+opencv-python>=4.8.0
+numpy>=1.21.0
+scikit-learn>=1.0.0
+Pillow>=9.0.0
+
+# YOLO-World (optional, but included for completeness)
+ultralytics>=8.0.0
+
+# SAM detector backends
+# For Python 3.8 (noetic docker) - fallback path
+groundingdino-py>=0.1.0
+segment-anything>=1.0.0
+
+# CLIP (required by YOLO-World)
+git+https://github.com/openai/CLIP.git
+
+# ROS1 Python bindings (should already be in noetic)
+# rospy
+# sensor-msgs
+# geometry-msgs
+# cv-bridge
+# tf2-ros
+

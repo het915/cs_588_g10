@@ -296,7 +296,7 @@ Visualization Manager:
       Shaft Length: 2
       Shaft Radius: 0.05000000074505806
       Shape: Arrow
-      Topic: /perception/goal_pose
+      Topic: /move_base_simple/goal
       Unreliable: false
       Value: true
     - Alpha: 1

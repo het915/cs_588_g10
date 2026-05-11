@@ -363,6 +363,7 @@ cd ~/host/Downloads/temp/gem_simulation_ws
 catkin_make --only-pkg-with-deps gem_perception   # first time only
 source devel/setup.bash
 roslaunch gem_perception perception_yolo.launch default_prompt:="red sign"
+roslaunch gem_perception perception_sam.launch default_prompt:="red sign"
 
 # Terminal 3 — change prompt anytime
 rostopic pub -1 /perception/prompt std_msgs/String "red cone"

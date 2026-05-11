@@ -2,14 +2,24 @@
 <launch>
   <arg name="default_prompt" default=""/>
   <arg name="run_rviz" default="true"/>
+  
+  <!-- Gazebo initial position (must match gem_init.launch args) -->
+  <arg name="gazebo_x" default="12.5"/>
+  <arg name="gazebo_y" default="-21.0"/>
+  <arg name="gazebo_yaw" default="3.1416"/>
 
   <rosparam command="load" file="$(find gem_perception)/config/perception.yaml"/>
+
+  <!-- Map TF broadcaster: Align map frame with Gazebo initial position (must start first) -->
+  <node name="map_tf_broadcaster" pkg="gem_perception" type="map_tf_broadcaster.py" output="screen">
+    <param name="gazebo_x" value="$(arg gazebo_x)"/>
+    <param name="gazebo_y" value="$(arg gazebo_y)"/>
+    <param name="gazebo_yaw" value="$(arg gazebo_yaw)"/>
+  </node>
 
   <node name="gem_perception_sam" pkg="gem_perception" type="sam_perception_node.py" output="screen">
     <param name="default_prompt" value="$(arg default_prompt)"/>
   </node>
-
-  <node name="map_tf_broadcaster" pkg="gem_perception" type="map_tf_broadcaster.py" output="screen"/>
 
   <node name="bev_overlay" pkg="gem_perception" type="bev_overlay_node.py" output="screen"/>
 

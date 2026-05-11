@@ -71,7 +71,7 @@ class SamPerceptionNode:
         self.pub_proj = rospy.Publisher("/perception/lidar_projected_image", Image, queue_size=1)
         self.pub_cluster = rospy.Publisher("/perception/object_cluster", PointCloud2, queue_size=1)
         self.pub_markers = rospy.Publisher("/perception/object_bbox_3d", MarkerArray, queue_size=1)
-        self.pub_goal_map = rospy.Publisher("/perception/goal_pose", PoseStamped, queue_size=1)
+        self.pub_goal_map = rospy.Publisher("/move_base_simple/goal", PoseStamped, queue_size=1)
         self.pub_goal_base = rospy.Publisher("/perception/goal_pose_base_link", PoseStamped, queue_size=1)
         self.pub_goal_est_flag = rospy.Publisher("/perception/goal_is_estimated", Bool, queue_size=1)
 
@@ -85,6 +85,11 @@ class SamPerceptionNode:
         self.sync.registerCallback(self._on_frame)
 
         rospy.loginfo("gem_perception (LangSAM) ready")
+        rospy.loginfo(f"  Base frame: {self.base_frame}")
+        rospy.loginfo(f"  Map frame: {self.map_frame}")
+        rospy.loginfo(f"  Camera frame: {self.camera_frame}")
+        rospy.loginfo(f"  LiDAR frame: {self.lidar_frame}")
+        rospy.loginfo(f"  Goal published to: /move_base_simple/goal (frame: {self.map_frame})")
 
     def _on_prompt(self, msg: String):
         with self.lock:
@@ -111,7 +116,6 @@ class SamPerceptionNode:
             det = self.detector.infer(image_bgr)
 
         K = K_from_camera_info(info_msg.K)
-        D = D_from_camera_info(info_msg.D)
         try:
             T_cam_lidar = self._lookup_matrix(self.camera_frame, self.lidar_frame, img_msg.header.stamp)
             T_base_lidar = self._lookup_matrix(self.base_frame, self.lidar_frame, img_msg.header.stamp)
@@ -124,7 +128,7 @@ class SamPerceptionNode:
         points_lidar = np.asarray(pc_list, dtype=np.float64) if pc_list else np.empty((0, 3), dtype=np.float64)
 
         pts_cam_all = transform_points(points_lidar, T_cam_lidar)
-        uv, idx = project_to_image(pts_cam_all, K, D)
+        uv, idx = project_to_image(pts_cam_all, K)
         depths = pts_cam_all[idx, 2] if idx.size else np.empty((0,))
         proj_img = draw_lidar_projection(image_bgr, uv, depths)
         self.pub_proj.publish(self.bridge.cv2_to_imgmsg(proj_img, "bgr8"))
@@ -137,7 +141,7 @@ class SamPerceptionNode:
         if det is not None:
             result = run_pipeline(
                 det, points_lidar, K, T_cam_lidar, T_base_lidar, T_base_cam,
-                self.params, D=D,
+                self.params,
             )
             goal_base = result.goal_base
             is_estimated = result.is_estimated
@@ -216,6 +220,8 @@ class SamPerceptionNode:
         pb.pose.position.z = float(goal_base[2])
         pb.pose.orientation.w = 1.0
         self.pub_goal_base.publish(pb)
+        
+        # Publish goal in map frame for MPPI controller
         try:
             T_map_base = self._lookup_matrix(self.map_frame, self.base_frame, stamp)
             pt_map = T_map_base @ np.array([goal_base[0], goal_base[1], goal_base[2], 1.0])
@@ -227,8 +233,10 @@ class SamPerceptionNode:
             pm.pose.position.z = float(pt_map[2])
             pm.pose.orientation.w = 1.0
             self.pub_goal_map.publish(pm)
+            rospy.loginfo_throttle(2.0, f"Goal published in {self.map_frame}: ({pm.pose.position.x:.2f}, {pm.pose.position.y:.2f})")
         except Exception as e:
-            rospy.logwarn_throttle(5.0, f"map TF unavailable, skipping map-frame goal: {e}")
+            rospy.logwarn_throttle(5.0, f"Failed to transform goal to {self.map_frame}: {e}")
+        
         self.pub_goal_est_flag.publish(Bool(data=bool(is_estimated)))
 
 

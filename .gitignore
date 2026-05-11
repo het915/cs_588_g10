@@ -3,6 +3,10 @@ build/
 install/
 log/
 
+build_isolated/
+devel_isolated/
+.catkin_workspace
+
 # Python
 __pycache__/
 *.pyc
