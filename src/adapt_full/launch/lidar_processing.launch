@@ -1,0 +1,11 @@
+<launch>
+  <!-- LiDAR DBSCAN pedestrian detector (rospy).
+       in:  /ouster/points (PointCloud2)
+       out: /lidar_pedestrian_position (Int32MultiArray, polar) + viz topics -->
+
+  <node pkg="adapt_full" type="adapt_lidar_processing_ros1.py"
+        name="lidar_preprocessor" output="screen">
+    <rosparam command="load"
+              file="$(find adapt_full)/config/lidar_params_ros1.yaml"/>
+  </node>
+</launch>

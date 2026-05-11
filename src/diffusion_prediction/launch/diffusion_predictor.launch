@@ -1,0 +1,31 @@
+<launch>
+  <!-- Diffusion-based pedestrian trajectory predictor (rospy).
+       Subscribes  /fusion_pedestrian_position (Int32MultiArray, polar in base_link)
+                   $(arg vehicle_speed_topic)  (pacmod2_msgs/VehicleSpeedRpt)
+       Publishes   /pedestrian_predictions_tensor (Float32MultiArray, [M,H=20,2], base_link)
+                   /person_prediction, /pedestrian_motion, /pedestrian_ttc -->
+
+  <arg name="prediction_mode" default="joint"/>
+  <arg name="weights"
+       default="$(find diffusion_prediction)/models/diffusion/av2_joint_v2/ema_best.pt"/>
+  <arg name="device" default="cuda:0"/>
+  <arg name="K" default="20"/>
+  <arg name="max_agents" default="16"/>
+  <arg name="vehicle_speed_topic" default="/pacmod/vehicle_speed_rpt"/>
+  <arg name="min_history_count" default="5"/>
+  <arg name="collision_distance_threshold" default="1.0"/>
+  <arg name="latency_warn_ms" default="80.0"/>
+
+  <node pkg="diffusion_prediction" type="infer_node_ros1.py"
+        name="diffusion_predictor_node" output="screen">
+    <param name="prediction_mode" value="$(arg prediction_mode)"/>
+    <param name="weights"         value="$(arg weights)"/>
+    <param name="device"          value="$(arg device)"/>
+    <param name="K"               value="$(arg K)"/>
+    <param name="max_agents"      value="$(arg max_agents)"/>
+    <param name="vehicle_speed_topic"           value="$(arg vehicle_speed_topic)"/>
+    <param name="min_history_count"             value="$(arg min_history_count)"/>
+    <param name="collision_distance_threshold"  value="$(arg collision_distance_threshold)"/>
+    <param name="latency_warn_ms"               value="$(arg latency_warn_ms)"/>
+  </node>
+</launch>

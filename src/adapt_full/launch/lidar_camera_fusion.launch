@@ -1,0 +1,11 @@
+<launch>
+  <!-- LiDAR + camera detection fusion (rospy).
+       in:  /lidar_pedestrian_position, /rgbd_pedestrian_position
+       out: /fusion_pedestrian_position (Int32MultiArray, polar) -->
+
+  <node pkg="adapt_full" type="adapt_lidar_camera_fusion_ros1.py"
+        name="sensor_fusion_node" output="screen">
+    <rosparam command="load"
+              file="$(find adapt_full)/config/sensor_fusion_params_ros1.yaml"/>
+  </node>
+</launch>
