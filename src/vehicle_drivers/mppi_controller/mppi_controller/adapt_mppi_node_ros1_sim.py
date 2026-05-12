@@ -282,8 +282,11 @@ class AdaptMPPINode:
         self.rate_hz          = float(gp('~rate_hz',   20.0))
         self.wheelbase        = float(gp('~wheelbase',  1.75))
         self.desired_speed    = min(5.0, float(gp('~desired_speed', 4.0)))
-        self.max_throttle     = min(1.0, float(gp('~max_throttle',  0.4)))
-        self.max_brake        = min(1.0, float(gp('~max_brake',     0.4)))
+        # Cap raised to 5.0 m/s² so the Gazebo Ackermann plugin (whose
+        # `acceleration` is in m/s², not a 0-1 pedal fraction like PACMod)
+        # can actually ramp the car to v_ref in ~3 s instead of crawling.
+        self.max_throttle     = min(5.0, float(gp('~max_throttle',  1.5)))
+        self.max_brake        = min(5.0, float(gp('~max_brake',     1.5)))
         self.cone_topic        = str(gp('~cone_topic', '/cone_positions'))
 
         self.speed            = 0.0
@@ -296,9 +299,11 @@ class AdaptMPPINode:
         self._gz_x   = 0.0
         self._gz_y   = 0.0
         self._gz_yaw = 0.0
-        # Spawn position recorded on first Gazebo callback — treated as map (0, 0)
-        self._origin_x = None
-        self._origin_y = None
+        # Spawn pose recorded on first Gazebo callback — treated as map (0, 0, 0).
+        # Yaw is also rebased so map +x = car's spawn heading (not Gazebo +x).
+        self._origin_x   = None
+        self._origin_y   = None
+        self._origin_yaw = 0.0
         self._gz_offset = float(gp('~gazebo_offset', 0.0))
         self._goal_reached_threshold = float(gp('~goal_reached_threshold', 1.0))
 
@@ -437,27 +442,40 @@ class AdaptMPPINode:
         twist = msg.twist[idx]
         q = pose.orientation
 
-        if self._origin_x is None:
-            self._origin_x = pose.position.x
-            self._origin_y = pose.position.y
-            rospy.loginfo(
-                f'Map origin set to Gazebo ({self._origin_x:.3f}, {self._origin_y:.3f})'
-            )
-
-        self._gz_x   = pose.position.x - self._origin_x
-        self._gz_y   = pose.position.y - self._origin_y
-        self._gz_yaw = math.atan2(
+        yaw_world = math.atan2(
             2.0 * (q.w * q.z + q.x * q.y),
             1.0 - 2.0 * (q.y * q.y + q.z * q.z),
         )
+
+        if self._origin_x is None:
+            self._origin_x   = pose.position.x
+            self._origin_y   = pose.position.y
+            self._origin_yaw = yaw_world
+            rospy.loginfo(
+                f'Map origin set to Gazebo ({self._origin_x:.3f}, '
+                f'{self._origin_y:.3f}, yaw={math.degrees(self._origin_yaw):.1f}deg)'
+            )
+
+        # Position delta rotated into the rebased map frame (so map +x points
+        # along the car's spawn heading, regardless of Gazebo world axes).
+        dx = pose.position.x - self._origin_x
+        dy = pose.position.y - self._origin_y
+        c, s = math.cos(-self._origin_yaw), math.sin(-self._origin_yaw)
+        self._gz_x = c * dx - s * dy
+        self._gz_y = s * dx + c * dy
+        # Yaw is also taken modulo the spawn yaw and wrapped to [-pi, pi].
+        dy_yaw = yaw_world - self._origin_yaw
+        self._gz_yaw = math.atan2(math.sin(dy_yaw), math.cos(dy_yaw))
+
         self.speed = float(self.speed_filter.get_data(
             math.sqrt(twist.linear.x ** 2 + twist.linear.y ** 2)
         ))
         self._use_gazebo_state = True
 
+        half = self._gz_yaw / 2.0
         self._tf_br.sendTransform(
             (self._gz_x, self._gz_y, 0.0),
-            (q.x, q.y, q.z, q.w),
+            (0.0, 0.0, math.sin(half), math.cos(half)),
             rospy.Time.now(),
             'base_footprint',
             'map',

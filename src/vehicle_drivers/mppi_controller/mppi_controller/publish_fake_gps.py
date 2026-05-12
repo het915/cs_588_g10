@@ -52,6 +52,8 @@ from visualization_msgs.msg import Marker, MarkerArray
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    # NOTE: --vN spawn-pose presets are defined further below; they
+    # override --ego-x/--ego-y/--ego-yaw after parsing.
     p.add_argument('--rate', type=float, default=10.0,
                    help='Ped publish rate (Hz). Default 10.')
     # --- Goal pose ----------------------------------------------------------
@@ -121,7 +123,40 @@ def parse_args():
                         'Default base_footprint — the sim node broadcasts '
                         'map -> base_footprint, so markers in this frame '
                         'follow the gazebo car automatically.')
-    return p.parse_args()
+    # --- Spawn-pose presets (exercise the map-yaw rebase in the sim node) --
+    # Each --vN overrides --ego-x/--ego-y/--ego-yaw with a different
+    # Gazebo spawn pose. The goal stays at (--goal-x, --goal-y) in map, so
+    # all variants should drive forward the same way if the sim node's map
+    # rebase is correct.
+    variants = p.add_mutually_exclusive_group()
+    variants.add_argument('--v1', dest='variant', action='store_const', const=1,
+                          help='Spawn (0, 0, yaw=0)  — baseline, Gazebo +x.')
+    variants.add_argument('--v2', dest='variant', action='store_const', const=2,
+                          help='Spawn (8, 4, yaw=+90deg) — translated + rotated left.')
+    variants.add_argument('--v3', dest='variant', action='store_const', const=3,
+                          help='Spawn (-6, -3, yaw=180deg) — translated + facing -x.')
+    p.set_defaults(variant=1)
+    args = p.parse_args()
+
+    # Apply the preset only to ego-x/y/yaw values the user did NOT pass
+    # explicitly — so e.g. `--v2 --ego-yaw 0` keeps the yaw at 0.
+    import sys as _sys
+    raw = _sys.argv[1:]
+    explicit = {
+        'ego_x':   any(a == '--ego-x'   or a.startswith('--ego-x=')   for a in raw),
+        'ego_y':   any(a == '--ego-y'   or a.startswith('--ego-y=')   for a in raw),
+        'ego_yaw': any(a == '--ego-yaw' or a.startswith('--ego-yaw=') for a in raw),
+    }
+    presets = {
+        2: (8.0,  4.0,  math.pi / 2.0),
+        3: (-6.0, -3.0, math.pi),
+    }
+    if args.variant in presets:
+        px, py, pyaw = presets[args.variant]
+        if not explicit['ego_x']:   args.ego_x   = px
+        if not explicit['ego_y']:   args.ego_y   = py
+        if not explicit['ego_yaw']: args.ego_yaw = pyaw
+    return args
 
 
 def main():
