@@ -304,16 +304,17 @@ class AdaptMPPINode:
                 _device_raw = 'cpu'
         device_param = _device_raw
         self.mppi = MPPI(
-            K=int(gp('~mppi/K', 1000)),
-            H=int(gp('~mppi/H', 20)),
+            K=int(gp('~mppi/K', 2000)),
+            H=int(gp('~mppi/H', 25)),
             dt=float(gp('~mppi/dt', 0.1)),
-            sigma_steer=float(gp('~mppi/sigma_steer', 0.15)),
+            sigma_steer=float(gp('~mppi/sigma_steer', 0.3)),
             sigma_accel=float(gp('~mppi/sigma_accel', 0.5)),
             lam=float(gp('~mppi/lambda_', 0.1)),
             v_ref=self.desired_speed,
             w_pos=float(gp('~mppi/w_pos', 15.0)),
-            w_vel=float(gp('~mppi/w_vel', 5.0)),
-            w_curv=float(gp('~mppi/w_curv', 2.0)),
+            w_vel=float(gp('~mppi/w_vel', 8.0)),
+            w_curv=float(gp('~mppi/w_curv', 4.0)),
+            w_heading=float(gp('~mppi/w_heading', 100.0)),
             w_obs=float(gp('~mppi/w_obs', 150.0)),
             w_obs_hard=float(gp('~mppi/w_obs_hard', 250.0)),
             w_obs_soft=float(gp('~mppi/w_obs_soft', 40.0)),
@@ -323,15 +324,24 @@ class AdaptMPPINode:
             ped_sigma=float(gp('~mppi/ped_sigma', 1.5)),
             cone_radius=float(gp('~mppi/cone_radius', 0.8)),
             clearance=float(gp('~mppi/clearance', 1.5)),
-            a_min=float(gp('~mppi/a_min', -15.0)),
-            a_max=float(gp('~mppi/a_max',  15.0)),
+            a_min=float(gp('~mppi/a_min', -10.0)),
+            a_max=float(gp('~mppi/a_max',  10.0)),
+            delta_max=float(gp('~mppi/delta_max', 0.45)),
             wheelbase=self.wheelbase,
             device=device_param,
         )
         self._log_device()
 
-        self._steer_deadband = float(gp('~steer_deadband', 0.01))
-        self._last_delta = 0.0
+        # Near-pass-through steering low-pass: alpha≈0.98 at 12 Hz / 20 Hz,
+        # so real corrections barely lag (~1 tick) while > 15 Hz residual
+        # jitter is shaved. Source-side noise reduction (lower sigma_steer,
+        # higher K) is doing most of the de-noising; this just smooths
+        # the last bit. Tune ~steer_filter/cutoff: lower = smoother +
+        # laggier, higher = closer to raw MPPI output.
+        self.steer_filter = OnlineFilter(
+            cutoff=float(gp('~steer_filter/cutoff', 12.0)),
+            fs=float(gp('~steer_filter/fs', self.rate_hz)),
+        )
 
         # Reference path built on demand from /move_base_simple/goal.
         # Control loop short-circuits until the first goal arrives.
@@ -573,14 +583,10 @@ class AdaptMPPINode:
             cones=self.cones if len(self.cones) > 0 else None,
         )
         delta_raw = float(u[0])
+        delta = float(self.steer_filter.get_data(delta_raw))
         accel = float(u[1])
 
-        delta = float(delta_raw)
-        if abs(delta - self._last_delta) < self._steer_deadband:
-            delta = self._last_delta
-        self._last_delta = delta
-
-        sw_deg = front2steer(math.degrees(delta))
+        delta_deg = math.degrees(delta)
 
         # MPPI's accel sign carries the intent: + means accelerate toward
         # cruising speed, - means brake. The plugin already slews `speed`
@@ -606,8 +612,8 @@ class AdaptMPPINode:
             1.0,
             f'MPPI | pos=({x:.2f},{y:.2f}) yaw={math.degrees(yaw):.1f}deg '
             f'v={self.speed:.2f}→{self._v_cmd:.2f} a={accel:+.2f} '
-            f'sw={sw_deg:.1f}deg obs={len(self.obstacles)} '
-            f'ESS/K={ess/self.mppi.K:.2f}',
+            f'δ_raw={math.degrees(delta_raw):+.1f}° δ_cmd={delta_deg:+.1f}° '
+            f'obs={len(self.obstacles)} ESS/K={ess/self.mppi.K:.2f}',
         )
 
         self.viz.publish(self.mppi, self.obstacles, stamp, accel=accel, delta=delta)
@@ -620,6 +626,32 @@ def main():
     AdaptMPPINode()
     rospy.spin()
 
+
+class OnlineFilter:
+    """
+    Simple low-pass filter for scalar streams (e.g., noisy steering).
+    Implements a first-order IIR filter (exponential smoothing).
+    """
+    def __init__(self, cutoff: float, fs: float):
+        self.cutoff  = float(cutoff)
+        self.fs      = float(fs)
+
+        # First-order RC LPF discretised via backward Euler:
+        #   alpha = dt / (tau + dt),  tau = 1 / (2π f_c),  dt = 1 / fs.
+        # Both terms must be in seconds — the previous version compared
+        # `tau` (s) against `fs` (Hz) and produced alpha ≈ 6.6e-4, making
+        # the filter effectively zero gain.
+        tau = 1.0 / (2.0 * math.pi * max(self.cutoff, 1e-6))
+        dt  = 1.0 / max(self.fs, 1e-6)
+        self.alpha = dt / (tau + dt)
+
+        self._y_prev = 0.0
+
+    def get_data(self, x: float) -> float:
+        """Update filter state and return filtered value."""
+        y = self.alpha * float(x) + (1.0 - self.alpha) * self._y_prev
+        self._y_prev = y
+        return y
 
 if __name__ == '__main__':
     main()
