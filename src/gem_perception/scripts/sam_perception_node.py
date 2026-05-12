@@ -60,7 +60,15 @@ class SamPerceptionNode:
         if default_prompt:
             self.detector.set_prompt(default_prompt)
 
-        self.hold = GoalHold(hold_seconds=rospy.get_param("~goal_hold_seconds", 2.0))
+        self.hold = GoalHold(
+            collect_seconds=rospy.get_param("~goal_collect_seconds", 3.0),
+            min_samples=rospy.get_param("~goal_min_samples", 5),
+            accept_estimated=rospy.get_param("~goal_accept_estimated", True),
+        )
+        rospy.loginfo(
+            f"GoalHold: collecting for {self.hold.collect_seconds:.1f}s "
+            f"(min {self.hold.min_samples} samples) then latching."
+        )
         self.bridge = CvBridge()
         self.lock = threading.Lock()
 
@@ -134,7 +142,7 @@ class SamPerceptionNode:
         self.pub_proj.publish(self.bridge.cv2_to_imgmsg(proj_img, "bgr8"))
 
         now = rospy.Time.now().to_sec()
-        goal_base = None
+        goal_map = None 
         is_estimated = False
         result = None
 
@@ -143,7 +151,6 @@ class SamPerceptionNode:
                 det, points_lidar, K, T_cam_lidar, T_base_lidar, T_base_cam,
                 self.params,
             )
-            goal_base = result.goal_base
             is_estimated = result.is_estimated
             ann = draw_detection_overlay(image_bgr, det.bbox_xyxy, det.mask, result.pixel_centroid,
                                          is_estimated, det.prompt, det.score)
@@ -151,15 +158,23 @@ class SamPerceptionNode:
             if result.cluster_cloud_base is not None:
                 self._publish_cluster_cloud(result.cluster_cloud_base, img_msg.header.stamp)
             self._publish_markers(result, img_msg.header.stamp)
+
+            try:
+                T_map_base = self._lookup_matrix(self.map_frame, self.base_frame, img_msg.header.stamp)
+                gb = result.goal_base
+                pt_map = T_map_base @ np.array([gb[0], gb[1], gb[2], 1.0])
+                goal_map = pt_map[:3]
+            except Exception as e:
+                rospy.logwarn_throttle(5.0, f"Failed to transform goal to map frame: {e}")
         else:
             self.pub_ann.publish(self.bridge.cv2_to_imgmsg(image_bgr, "bgr8"))
 
-        held = self.hold.update(now, goal_base, is_estimated)
+        held = self.hold.update(now, goal_map, is_estimated)
         if held is None:
             self.pub_goal_est_flag.publish(Bool(data=False))
             return
-        g, is_est = held
-        self._publish_goal(g, is_est, img_msg.header.stamp)
+        g_map, is_est = held
+        self._publish_goal(g_map, is_est, img_msg.header.stamp)
 
     def _publish_cluster_cloud(self, pts_base, stamp):
         header = Header(frame_id=self.base_frame, stamp=stamp)
@@ -211,34 +226,19 @@ class SamPerceptionNode:
         markers.markers.append(mk)
         self.pub_markers.publish(markers)
 
-    def _publish_goal(self, goal_base, is_estimated, stamp):
-        pb = PoseStamped()
-        pb.header.frame_id = self.base_frame
-        pb.header.stamp = stamp
-        pb.pose.position.x = float(goal_base[0])
-        pb.pose.position.y = float(goal_base[1])
-        pb.pose.position.z = float(goal_base[2])
-        pb.pose.orientation.w = 1.0
-        self.pub_goal_base.publish(pb)
-        
-        # Publish goal in map frame for MPPI controller
-        try:
-            T_map_base = self._lookup_matrix(self.map_frame, self.base_frame, stamp)
-            pt_map = T_map_base @ np.array([goal_base[0], goal_base[1], goal_base[2], 1.0])
-            pm = PoseStamped()
-            pm.header.frame_id = self.map_frame
-            pm.header.stamp = stamp
-            pm.pose.position.x = float(pt_map[0])
-            pm.pose.position.y = float(pt_map[1])
-            pm.pose.position.z = float(pt_map[2])
-            pm.pose.orientation.w = 1.0
-            self.pub_goal_map.publish(pm)
-            rospy.loginfo_throttle(2.0, f"Goal published in {self.map_frame}: ({pm.pose.position.x:.2f}, {pm.pose.position.y:.2f})")
-        except Exception as e:
-            rospy.logwarn_throttle(5.0, f"Failed to transform goal to {self.map_frame}: {e}")
-        
+    def _publish_goal(self, goal_map, is_estimated, stamp):
+        pm = PoseStamped()
+        pm.header.frame_id = self.map_frame
+        pm.header.stamp = stamp
+        pm.pose.position.x = float(goal_map[0])
+        pm.pose.position.y = float(goal_map[1])
+        pm.pose.position.z = float(goal_map[2])
+        pm.pose.orientation.w = 1.0
+        self.pub_goal_map.publish(pm)
+        rospy.loginfo_throttle(2.0,
+            f"Goal (map): ({goal_map[0]:.2f}, {goal_map[1]:.2f}) "
+            f"{'[estimated]' if is_estimated else '[LiDAR]'}")
         self.pub_goal_est_flag.publish(Bool(data=bool(is_estimated)))
-
 
 def main():
     SamPerceptionNode()

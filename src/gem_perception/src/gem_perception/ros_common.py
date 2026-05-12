@@ -112,23 +112,82 @@ def draw_lidar_projection(
         cv2.circle(out, (u[i], v[i]), 2, tuple(int(c) for c in colors[i]), -1)
     return out
 
-
 class GoalHold:
-    """Keeps the last goal active for a short timeout after detection is lost."""
+    """Collects detections for the first `collect_seconds` seconds, then
+    latches the median position permanently.  Robust to early outliers.
 
-    def __init__(self, hold_seconds: float = 2.0):
-        self.hold_seconds = hold_seconds
-        self._last_time: Optional[float] = None
-        self._last_goal: Optional[Tuple[np.ndarray, bool]] = None
+    Parameters
+    ----------
+    collect_seconds : float
+        How long to gather detections before latching (default 3.0 s).
+        Increase if the first few detections are noisy.
+    min_samples : int
+        Minimum number of detections needed to latch.  If fewer arrive
+        within collect_seconds the window extends until this is met.
+    accept_estimated : bool
+        If True (default), also accept is_estimated=True detections
+        (image-only, no LiDAR confirmation).  Set False to require LiDAR.
+    """
 
-    def update(self, now: float, goal_base: Optional[np.ndarray], is_estimated: bool) -> Optional[Tuple[np.ndarray, bool]]:
-        if goal_base is not None:
-            self._last_time = now
-            self._last_goal = (goal_base.copy(), is_estimated)
-            return self._last_goal
-        if self._last_goal is None or self._last_time is None:
+    def __init__(
+        self,
+        hold_seconds: float = 2.0,   # kept for API compatibility, unused
+        collect_seconds: float = 3.0,
+        min_samples: int = 5,
+        accept_estimated: bool = True,
+    ):
+        self.collect_seconds = collect_seconds
+        self.min_samples = min_samples
+        self.accept_estimated = accept_estimated
+
+        self._collecting: bool = True          # True = still gathering
+        self._collect_start: Optional[float] = None
+        self._samples: list = []               # list of np.ndarray (3,)
+        self._latched: Optional[Tuple[np.ndarray, bool]] = None
+
+    def update(
+        self,
+        now: float,
+        goal_base: Optional[np.ndarray],
+        is_estimated: bool,
+    ) -> Optional[Tuple[np.ndarray, bool]]:
+
+        # Already latched — return forever, ignore new detections
+        if self._latched is not None:
+            return self._latched
+
+        # No detection this frame — nothing to add
+        if goal_base is None:
             return None
-        if now - self._last_time > self.hold_seconds:
-            self._last_goal = None
+
+        # Skip estimated-only detections if not accepted
+        if is_estimated and not self.accept_estimated:
             return None
-        return self._last_goal
+
+        # Start the collection clock on first detection
+        if self._collect_start is None:
+            self._collect_start = now
+
+        self._samples.append(goal_base.copy().astype(float))
+
+        # Check if collection window is done
+        elapsed = now - self._collect_start
+        enough_time = elapsed >= self.collect_seconds
+        enough_samples = len(self._samples) >= self.min_samples
+
+        if enough_time and enough_samples:
+            pts = np.array(self._samples)          # (N, 3)
+            median_pos = np.median(pts, axis=0)    # median per axis — outlier robust
+            self._latched = (median_pos, is_estimated)
+            self._collecting = False
+            return self._latched
+
+        # Still collecting — don't publish yet
+        return None
+
+    def reset(self):
+        """Clear the latch to start a new collection."""
+        self._collecting = True
+        self._collect_start = None
+        self._samples = []
+        self._latched = None

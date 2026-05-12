@@ -243,6 +243,9 @@ class MPPIVisualizer:
 
         r = float(mppi.clearance)
         for i in range(len(obstacles)):
+            name = self._obstacle_names[i] if hasattr(self, '_obstacle_names') and i < len(self._obstacle_names) else f'obs_{i}'
+
+            # Cylinder marker
             m = Marker()
             m.header.frame_id = self.frame_id
             m.header.stamp    = stamp
@@ -257,6 +260,23 @@ class MPPIVisualizer:
             m.scale.z = 0.15
             m.color.r, m.color.g, m.color.b, m.color.a = 1.0, 0.25, 0.25, 0.35
             msg.markers.append(m)
+
+            # Text label above the cylinder
+            t = Marker()
+            t.header.frame_id = self.frame_id
+            t.header.stamp    = stamp
+            t.ns              = 'obstacle_labels'
+            t.id              = i + 1
+            t.type            = Marker.TEXT_VIEW_FACING
+            t.action          = Marker.ADD
+            t.pose.position.x  = float(obstacles[i, 0])
+            t.pose.position.y  = float(obstacles[i, 1])
+            t.pose.position.z  = 1.5
+            t.pose.orientation.w = 1.0
+            t.scale.z = 0.6
+            t.color.r, t.color.g, t.color.b, t.color.a = 1.0, 1.0, 0.0, 1.0
+            t.text = name
+            msg.markers.append(t)
 
         self._obs_pub.publish(msg)
 
@@ -293,6 +313,13 @@ class AdaptMPPINode:
         # Gazebo ground-truth state
         self._gazebo_model_name = str(gp('~gazebo_model_name', 'gem_e4'))
         self._use_gazebo_state  = False
+
+        # Obstacle keywords matched against Gazebo model names
+        self._obstacle_keywords = ['cone', 'pedestrian', 'bicycle', 'car1', 'traffic_light', 'stop_sign']
+        self._ignore_keywords   = ['gem_e4', 'grey_wall', 'asphalt', 'parking_line',
+                                   'redline', 'track_curb', 'bars', 'start_grid',
+                                   'yellow_point', 'ground', 'sun', 'sky']
+        self._max_obstacle_dist = float(gp('~max_obstacle_dist', 30.0))
         self._gz_x   = 0.0
         self._gz_y   = 0.0
         self._gz_yaw = 0.0
@@ -300,7 +327,7 @@ class AdaptMPPINode:
         self._origin_x = None
         self._origin_y = None
         self._gz_offset = float(gp('~gazebo_offset', 0.0))
-        self._goal_reached_threshold = float(gp('~goal_reached_threshold', 1.0))
+        self._goal_reached_threshold = float(gp('~goal_reached_threshold', 1.5))
 
         # ------------------------------------------------------------------ #
         #  MPPI + helpers                                                      #
@@ -463,6 +490,25 @@ class AdaptMPPINode:
             'map',
         )
 
+        # --- Extract obstacles from Gazebo model_states ---
+        obs_list = []
+        obs_names = []
+        for name, pose_i in zip(msg.name, msg.pose):
+            if any(k in name for k in self._ignore_keywords):
+                continue
+            if not any(k in name for k in self._obstacle_keywords):
+                continue
+            ox = pose_i.position.x - self._origin_x
+            oy = pose_i.position.y - self._origin_y
+            dist = math.sqrt((ox - self._gz_x) ** 2 + (oy - self._gz_y) ** 2)
+            if dist > self._max_obstacle_dist:
+                continue
+            obs_list.append([ox, oy])
+            obs_names.append(name)                          # ← 追加
+        self.obstacles = np.array(obs_list, dtype=float) if obs_list else np.zeros((0, 2), dtype=float)
+        self._obstacle_names = obs_names                    # ← 追加
+
+        
     def _pred_tensor_cb(self, msg):
         if not msg.data or not self._use_gazebo_state:
             self.ped_trajectories = None
@@ -504,9 +550,16 @@ class AdaptMPPINode:
             rospy.logwarn('Goal too close to current pose (<0.5 m); ignoring')
             return
 
+        stop_offset = float(rospy.get_param('~stop_offset_m', 1.5))
+        direction = goal - start
+        dist = np.linalg.norm(direction)
+        if dist > stop_offset + 0.5:
+            effective_goal = start + direction * ((dist - stop_offset) / dist)
+        else:
+            effective_goal = start + direction * 0.5 
         N = max(2, self._goal_path_samples)
         ts = np.linspace(0.0, 1.0, N)
-        pts = start + (goal - start) * ts[:, None]
+        pts = start + (effective_goal - start) * ts[:, None]
         self.ref_path = ReferencePath(pts)
         self.viz.publish_static(self.ref_path)
         rospy.loginfo(
