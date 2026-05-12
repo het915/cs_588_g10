@@ -60,46 +60,6 @@ def front2steer(f_angle_deg):
     return max(min(sw, 450.0), -450.0)
 
 
-class PID:
-    def __init__(self, kp, ki, kd, wg=None):
-        self.kp, self.ki, self.kd, self.wg = kp, ki, kd, wg
-        self.iterm = 0.0
-        self.last_e = 0.0
-        self.last_t = None
-
-    def reset(self):
-        self.iterm = 0.0
-        self.last_e = 0.0
-        self.last_t = None
-
-    def get_control(self, t, e):
-        if self.last_t is None:
-            dt, de = 0.0, 0.0
-        else:
-            dt = t - self.last_t
-            de = (e - self.last_e) / dt if dt > 0.0 else 0.0
-        self.iterm += e * dt
-        if self.wg is not None:
-            self.iterm = max(min(self.iterm, self.wg), -self.wg)
-        self.last_e = e
-        self.last_t = t
-        return self.kp * e + self.ki * self.iterm + self.kd * de
-
-
-class OnlineFilter:
-    def __init__(self, cutoff, fs, order=1):
-        self.alpha = 1.0 - math.exp(
-            -2.0 * math.pi * max(cutoff, 1e-6) / max(fs, 1e-6)
-        )
-        self._y = None
-
-    def get_data(self, x):
-        self._y = x if self._y is None else (
-            self.alpha * x + (1.0 - self.alpha) * self._y
-        )
-        return self._y
-
-
 # =========================================================================== #
 #  Visualisation (slim ROS1 port of viz.MPPIVisualizer)                         #
 # =========================================================================== #
@@ -301,12 +261,7 @@ class AdaptMPPINode:
         # ------------------------------------------------------------------ #
         self.rate_hz          = float(gp('~rate_hz',   20.0))
         self.wheelbase        = float(gp('~wheelbase',  1.75))
-        self.desired_speed    = min(5.0, float(gp('~desired_speed', 4.0)))
-        # Cap raised to 5.0 m/s² so the Gazebo Ackermann plugin (whose
-        # `acceleration` is in m/s², not a 0-1 pedal fraction like PACMod)
-        # can actually ramp the car to v_ref in ~3 s instead of crawling.
-        self.max_throttle     = min(5.0, float(gp('~max_throttle',  1.5)))
-        self.max_brake        = min(5.0, float(gp('~max_brake',     1.5)))
+        self.desired_speed    = min(8.0, float(gp('~desired_speed', 3.0)))
         self.cone_topic        = str(gp('~cone_topic', '/cone_positions'))
 
         self.speed            = 0.0
@@ -349,8 +304,8 @@ class AdaptMPPINode:
                 _device_raw = 'cpu'
         device_param = _device_raw
         self.mppi = MPPI(
-            K=int(gp('~mppi/K', 500)),
-            H=int(gp('~mppi/H', 30)),
+            K=int(gp('~mppi/K', 1000)),
+            H=int(gp('~mppi/H', 20)),
             dt=float(gp('~mppi/dt', 0.1)),
             sigma_steer=float(gp('~mppi/sigma_steer', 0.15)),
             sigma_accel=float(gp('~mppi/sigma_accel', 0.5)),
@@ -368,22 +323,15 @@ class AdaptMPPINode:
             ped_sigma=float(gp('~mppi/ped_sigma', 1.5)),
             cone_radius=float(gp('~mppi/cone_radius', 0.8)),
             clearance=float(gp('~mppi/clearance', 1.5)),
+            a_min=float(gp('~mppi/a_min', -15.0)),
+            a_max=float(gp('~mppi/a_max',  15.0)),
             wheelbase=self.wheelbase,
             device=device_param,
         )
         self._log_device()
 
-        self.pid_speed = PID(
-            kp=float(gp('~pid/kp', 2.0)),
-            ki=float(gp('~pid/ki', 0.0)),
-            kd=float(gp('~pid/kd', 0.1)),
-            wg=float(gp('~pid/wg', 10.0)),
-        )
-        self.speed_filter = OnlineFilter(
-            cutoff=float(gp('~filter/cutoff', 1.2)),
-            fs=float(gp('~filter/fs', 30.0)),
-            order=int(gp('~filter/order', 4)),
-        )
+        self._steer_deadband = float(gp('~steer_deadband', 0.01))
+        self._last_delta = 0.0
 
         # Reference path built on demand from /move_base_simple/goal.
         # Control loop short-circuits until the first goal arrives.
@@ -426,8 +374,6 @@ class AdaptMPPINode:
         #  Publishers                                                          #
         # ------------------------------------------------------------------ #
         self.ackermann_pub = rospy.Publisher('/ackermann_cmd', AckermannDrive, queue_size=1)
-        self._accel_cmd_value = 0.0
-        self._brake_cmd_value = 0.0
 
         # ------------------------------------------------------------------ #
         #  Timer                                                               #
@@ -494,9 +440,9 @@ class AdaptMPPINode:
         dy_yaw = yaw_world - self._origin_yaw
         self._gz_yaw = math.atan2(math.sin(dy_yaw), math.cos(dy_yaw))
 
-        self.speed = float(self.speed_filter.get_data(
+        self.speed = float(
             math.sqrt(twist.linear.x ** 2 + twist.linear.y ** 2)
-        ))
+        )
         self._use_gazebo_state = True
 
         half = self._gz_yaw / 2.0
@@ -610,7 +556,6 @@ class AdaptMPPINode:
         if dist_to_goal < self._goal_reached_threshold:
             self.ackermann_pub.publish(AckermannDrive())
             self._v_cmd = 0.0
-            self.pid_speed.reset()
             self.ref_path = None
             rospy.loginfo(f'Goal reached — stopped ({dist_to_goal:.2f} m from target)')
             return
@@ -627,40 +572,40 @@ class AdaptMPPINode:
             ped_trajectories=self.ped_trajectories,
             cones=self.cones if len(self.cones) > 0 else None,
         )
-        delta = float(u[0])
+        delta_raw = float(u[0])
         accel = float(u[1])
+
+        delta = float(delta_raw)
+        if abs(delta - self._last_delta) < self._steer_deadband:
+            delta = self._last_delta
+        self._last_delta = delta
 
         sw_deg = front2steer(math.degrees(delta))
 
-        self._v_cmd = max(
-            0.0,
-            min(self._v_cmd + accel * (1.0 / self.rate_hz), self.desired_speed),
-        )
-        now = stamp.to_sec()
-        speed_err = self._v_cmd - self.speed
-        if abs(speed_err) < 0.05:
-            speed_err = 0.0
-        pid_out = self.pid_speed.get_control(now, speed_err)
-        if pid_out >= 0.0:
-            self._accel_cmd_value = min(pid_out, self.max_throttle)
-            self._brake_cmd_value = 0.0
+        # MPPI's accel sign carries the intent: + means accelerate toward
+        # cruising speed, - means brake. The plugin already slews `speed`
+        # at `acceleration` m/s², so we just hand it a target and a rate —
+        # no software integration on _v_cmd (that was double-rate-limiting
+        # the response). `~min_accel` floors the slew so the plugin still
+        # moves when MPPI commands a near-zero accel at cruise.
+        if accel >= 0.0:
+            self._v_cmd = self.desired_speed
         else:
-            self._accel_cmd_value = 0.0
-            self._brake_cmd_value = min(abs(pid_out), self.max_brake)
+            self._v_cmd = 0.0
+        slew = max(abs(float(accel)), float(rospy.get_param('~min_accel', 1.0)))
 
         ackermann_msg = AckermannDrive()
         ackermann_msg.steering_angle = delta
         ackermann_msg.steering_angle_velocity = 0.0
         ackermann_msg.speed = self._v_cmd
-        ackermann_msg.acceleration = float(self._accel_cmd_value)
+        ackermann_msg.acceleration = slew
         self.ackermann_pub.publish(ackermann_msg)
 
         ess = self.mppi.effective_sample_count()
         rospy.loginfo_throttle(
             1.0,
             f'MPPI | pos=({x:.2f},{y:.2f}) yaw={math.degrees(yaw):.1f}deg '
-            f'v={self.speed:.2f}→{self._v_cmd:.2f} '
-            f'thr={self._accel_cmd_value:.2f} brk={self._brake_cmd_value:.2f} '
+            f'v={self.speed:.2f}→{self._v_cmd:.2f} a={accel:+.2f} '
             f'sw={sw_deg:.1f}deg obs={len(self.obstacles)} '
             f'ESS/K={ess/self.mppi.K:.2f}',
         )
