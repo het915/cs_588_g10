@@ -40,6 +40,11 @@ RUN pip3 install --no-cache-dir 'typing-extensions<4.13' 'numpy<2' \
 # Source ROS for every interactive bash so `rostopic`, etc. work out of the box.
 RUN echo "source /opt/ros/noetic/setup.bash" >> /etc/bash.bashrc
 
+# tmux lives in its own final layer so adding/removing it doesn't bust the
+# heavy apt + pip caches above.
+RUN apt-get update && apt-get install -y --no-install-recommends tmux \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /workspace
 
 CMD ["bash"]
