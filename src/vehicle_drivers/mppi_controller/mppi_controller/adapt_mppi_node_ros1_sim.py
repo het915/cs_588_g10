@@ -329,6 +329,11 @@ class AdaptMPPINode:
         self._gz_offset = float(gp('~gazebo_offset', 0.0))
         self._goal_reached_threshold = float(gp('~goal_reached_threshold', 1.5))
 
+        self._last_clock_secs  = 0
+        self._last_clock_nsecs = 0
+        from rosgraph_msgs.msg import Clock
+        rospy.Subscriber('/clock', Clock, self._clock_cb, queue_size=1)
+
         # ------------------------------------------------------------------ #
         #  MPPI + helpers                                                      #
         # ------------------------------------------------------------------ #
@@ -344,8 +349,8 @@ class AdaptMPPINode:
                 _device_raw = 'cpu'
         device_param = _device_raw
         self.mppi = MPPI(
-            K=int(gp('~mppi/K', 500)),
-            H=int(gp('~mppi/H', 30)),
+            K=int(gp('~mppi/K', 100)),
+            H=int(gp('~mppi/H', 100)),
             dt=float(gp('~mppi/dt', 0.1)),
             sigma_steer=float(gp('~mppi/sigma_steer', 0.15)),
             sigma_accel=float(gp('~mppi/sigma_accel', 0.5)),
@@ -436,7 +441,10 @@ class AdaptMPPINode:
     # ---------------------------------------------------------------------- #
     #  Init helpers                                                            #
     # ---------------------------------------------------------------------- #
-
+    def _clock_cb(self, msg):
+        self._last_clock_secs  = msg.clock.secs
+        self._last_clock_nsecs = msg.clock.nsecs
+        
     def _log_device(self):
         try:
             import torch
@@ -485,7 +493,7 @@ class AdaptMPPINode:
         self._tf_br.sendTransform(
             (self._gz_x, self._gz_y, 0.0),
             (q.x, q.y, q.z, q.w),
-            rospy.Time.now(),
+            rospy.Time(self._last_clock_secs, self._last_clock_nsecs),
             'base_footprint',
             'map',
         )
@@ -508,7 +516,7 @@ class AdaptMPPINode:
         self.obstacles = np.array(obs_list, dtype=float) if obs_list else np.zeros((0, 2), dtype=float)
         self._obstacle_names = obs_names                    # ← 追加
 
-        
+
     def _pred_tensor_cb(self, msg):
         if not msg.data or not self._use_gazebo_state:
             self.ped_trajectories = None
@@ -603,12 +611,16 @@ class AdaptMPPINode:
 
         active_path = self.ref_path
 
+        import time
+        _t0 = time.perf_counter()
         u = self.mppi.update(
             state, active_path,
             obstacles=self.obstacles if self.ped_trajectories is None else None,
             ped_trajectories=self.ped_trajectories,
             cones=self.cones if len(self.cones) > 0 else None,
         )
+        _t1 = time.perf_counter()
+        rospy.logwarn(f"[TIMING] mppi.update={(_t1-_t0)*1000:.1f}ms  K={self.mppi.K}  obstacles={len(self.obstacles)}")
         delta = float(u[0])
         accel = float(u[1])
 

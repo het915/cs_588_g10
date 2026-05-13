@@ -51,40 +51,6 @@ def main():
             
             br.sendTransform(t1)
             
-            # Transform 2: map → base_footprint (identity, connects to robot tree)
-            t2 = TransformStamped()
-            t2.header.stamp = rospy.Time.now()
-            t2.header.frame_id = map_frame
-            t2.child_frame_id = "base_footprint"
-            
-            t2.transform.translation.x = 0.0
-            t2.transform.translation.y = 0.0
-            t2.transform.translation.z = 0.0
-            
-            t2.transform.rotation.x = 0.0
-            t2.transform.rotation.y = 0.0
-            t2.transform.rotation.z = 0.0
-            t2.transform.rotation.w = 1.0
-            
-            br.sendTransform(t2)
-            
-            # Transform 3: base_footprint → base_link (identity, standard robot frame)
-            t3 = TransformStamped()
-            t3.header.stamp = rospy.Time.now()
-            t3.header.frame_id = "base_footprint"
-            t3.child_frame_id = "base_link"
-            
-            t3.transform.translation.x = 0.0
-            t3.transform.translation.y = 0.0
-            t3.transform.translation.z = 0.0
-            
-            t3.transform.rotation.x = 0.0
-            t3.transform.rotation.y = 0.0
-            t3.transform.rotation.z = 0.0
-            t3.transform.rotation.w = 1.0
-            
-            br.sendTransform(t3)
-            
             count += 1
             if count % 50 == 0:
                 rospy.logdebug(f"TF: {world_frame}→{map_frame} @ {t1.header.stamp}")
