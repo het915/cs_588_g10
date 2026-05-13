@@ -60,46 +60,6 @@ def front2steer(f_angle_deg):
     return max(min(sw, 450.0), -450.0)
 
 
-class PID:
-    def __init__(self, kp, ki, kd, wg=None):
-        self.kp, self.ki, self.kd, self.wg = kp, ki, kd, wg
-        self.iterm = 0.0
-        self.last_e = 0.0
-        self.last_t = None
-
-    def reset(self):
-        self.iterm = 0.0
-        self.last_e = 0.0
-        self.last_t = None
-
-    def get_control(self, t, e):
-        if self.last_t is None:
-            dt, de = 0.0, 0.0
-        else:
-            dt = t - self.last_t
-            de = (e - self.last_e) / dt if dt > 0.0 else 0.0
-        self.iterm += e * dt
-        if self.wg is not None:
-            self.iterm = max(min(self.iterm, self.wg), -self.wg)
-        self.last_e = e
-        self.last_t = t
-        return self.kp * e + self.ki * self.iterm + self.kd * de
-
-
-class OnlineFilter:
-    def __init__(self, cutoff, fs, order=1):
-        self.alpha = 1.0 - math.exp(
-            -2.0 * math.pi * max(cutoff, 1e-6) / max(fs, 1e-6)
-        )
-        self._y = None
-
-    def get_data(self, x):
-        self._y = x if self._y is None else (
-            self.alpha * x + (1.0 - self.alpha) * self._y
-        )
-        return self._y
-
-
 # =========================================================================== #
 #  Visualisation (slim ROS1 port of viz.MPPIVisualizer)                         #
 # =========================================================================== #
@@ -301,9 +261,7 @@ class AdaptMPPINode:
         # ------------------------------------------------------------------ #
         self.rate_hz          = float(gp('~rate_hz',   20.0))
         self.wheelbase        = float(gp('~wheelbase',  1.75))
-        self.desired_speed    = min(5.0, float(gp('~desired_speed', 4.0)))
-        self.max_throttle     = min(1.0, float(gp('~max_throttle',  0.4)))
-        self.max_brake        = min(1.0, float(gp('~max_brake',     0.4)))
+        self.desired_speed    = min(8.0, float(gp('~desired_speed', 3.0)))
         self.cone_topic        = str(gp('~cone_topic', '/cone_positions'))
 
         self.speed            = 0.0
@@ -323,9 +281,11 @@ class AdaptMPPINode:
         self._gz_x   = 0.0
         self._gz_y   = 0.0
         self._gz_yaw = 0.0
-        # Spawn position recorded on first Gazebo callback — treated as map (0, 0)
-        self._origin_x = None
-        self._origin_y = None
+        # Spawn pose recorded on first Gazebo callback — treated as map (0, 0, 0).
+        # Yaw is also rebased so map +x = car's spawn heading (not Gazebo +x).
+        self._origin_x   = None
+        self._origin_y   = None
+        self._origin_yaw = 0.0
         self._gz_offset = float(gp('~gazebo_offset', 0.0))
         self._goal_reached_threshold = float(gp('~goal_reached_threshold', 1.5))
 
@@ -352,13 +312,14 @@ class AdaptMPPINode:
             K=int(gp('~mppi/K', 100)),
             H=int(gp('~mppi/H', 100)),
             dt=float(gp('~mppi/dt', 0.1)),
-            sigma_steer=float(gp('~mppi/sigma_steer', 0.15)),
+            sigma_steer=float(gp('~mppi/sigma_steer', 0.3)),
             sigma_accel=float(gp('~mppi/sigma_accel', 0.5)),
             lam=float(gp('~mppi/lambda_', 0.1)),
             v_ref=self.desired_speed,
             w_pos=float(gp('~mppi/w_pos', 15.0)),
-            w_vel=float(gp('~mppi/w_vel', 5.0)),
-            w_curv=float(gp('~mppi/w_curv', 2.0)),
+            w_vel=float(gp('~mppi/w_vel', 8.0)),
+            w_curv=float(gp('~mppi/w_curv', 4.0)),
+            w_heading=float(gp('~mppi/w_heading', 100.0)),
             w_obs=float(gp('~mppi/w_obs', 150.0)),
             w_obs_hard=float(gp('~mppi/w_obs_hard', 250.0)),
             w_obs_soft=float(gp('~mppi/w_obs_soft', 40.0)),
@@ -368,21 +329,23 @@ class AdaptMPPINode:
             ped_sigma=float(gp('~mppi/ped_sigma', 1.5)),
             cone_radius=float(gp('~mppi/cone_radius', 0.8)),
             clearance=float(gp('~mppi/clearance', 1.5)),
+            a_min=float(gp('~mppi/a_min', -10.0)),
+            a_max=float(gp('~mppi/a_max',  10.0)),
+            delta_max=float(gp('~mppi/delta_max', 0.45)),
             wheelbase=self.wheelbase,
             device=device_param,
         )
         self._log_device()
 
-        self.pid_speed = PID(
-            kp=float(gp('~pid/kp', 2.0)),
-            ki=float(gp('~pid/ki', 0.0)),
-            kd=float(gp('~pid/kd', 0.1)),
-            wg=float(gp('~pid/wg', 10.0)),
-        )
-        self.speed_filter = OnlineFilter(
-            cutoff=float(gp('~filter/cutoff', 1.2)),
-            fs=float(gp('~filter/fs', 30.0)),
-            order=int(gp('~filter/order', 4)),
+        # Near-pass-through steering low-pass: alpha≈0.98 at 12 Hz / 20 Hz,
+        # so real corrections barely lag (~1 tick) while > 15 Hz residual
+        # jitter is shaved. Source-side noise reduction (lower sigma_steer,
+        # higher K) is doing most of the de-noising; this just smooths
+        # the last bit. Tune ~steer_filter/cutoff: lower = smoother +
+        # laggier, higher = closer to raw MPPI output.
+        self.steer_filter = OnlineFilter(
+            cutoff=float(gp('~steer_filter/cutoff', 12.0)),
+            fs=float(gp('~steer_filter/fs', self.rate_hz)),
         )
 
         # Reference path built on demand from /move_base_simple/goal.
@@ -426,8 +389,6 @@ class AdaptMPPINode:
         #  Publishers                                                          #
         # ------------------------------------------------------------------ #
         self.ackermann_pub = rospy.Publisher('/ackermann_cmd', AckermannDrive, queue_size=1)
-        self._accel_cmd_value = 0.0
-        self._brake_cmd_value = 0.0
 
         # ------------------------------------------------------------------ #
         #  Timer                                                               #
@@ -472,24 +433,37 @@ class AdaptMPPINode:
         twist = msg.twist[idx]
         q = pose.orientation
 
-        if self._origin_x is None:
-            self._origin_x = pose.position.x
-            self._origin_y = pose.position.y
-            rospy.loginfo(
-                f'Map origin set to Gazebo ({self._origin_x:.3f}, {self._origin_y:.3f})'
-            )
-
-        self._gz_x   = pose.position.x - self._origin_x
-        self._gz_y   = pose.position.y - self._origin_y
-        self._gz_yaw = math.atan2(
+        yaw_world = math.atan2(
             2.0 * (q.w * q.z + q.x * q.y),
             1.0 - 2.0 * (q.y * q.y + q.z * q.z),
         )
-        self.speed = float(self.speed_filter.get_data(
+
+        if self._origin_x is None:
+            self._origin_x   = pose.position.x
+            self._origin_y   = pose.position.y
+            self._origin_yaw = yaw_world
+            rospy.loginfo(
+                f'Map origin set to Gazebo ({self._origin_x:.3f}, '
+                f'{self._origin_y:.3f}, yaw={math.degrees(self._origin_yaw):.1f}deg)'
+            )
+
+        # Position delta rotated into the rebased map frame (so map +x points
+        # along the car's spawn heading, regardless of Gazebo world axes).
+        dx = pose.position.x - self._origin_x
+        dy = pose.position.y - self._origin_y
+        c, s = math.cos(-self._origin_yaw), math.sin(-self._origin_yaw)
+        self._gz_x = c * dx - s * dy
+        self._gz_y = s * dx + c * dy
+        # Yaw is also taken modulo the spawn yaw and wrapped to [-pi, pi].
+        dy_yaw = yaw_world - self._origin_yaw
+        self._gz_yaw = math.atan2(math.sin(dy_yaw), math.cos(dy_yaw))
+
+        self.speed = float(
             math.sqrt(twist.linear.x ** 2 + twist.linear.y ** 2)
-        ))
+        )
         self._use_gazebo_state = True
 
+        half = self._gz_yaw / 2.0
         self._tf_br.sendTransform(
             (self._gz_x, self._gz_y, 0.0),
             (q.x, q.y, q.z, q.w),
@@ -600,7 +574,6 @@ class AdaptMPPINode:
         if dist_to_goal < self._goal_reached_threshold:
             self.ackermann_pub.publish(AckermannDrive())
             self._v_cmd = 0.0
-            self.pid_speed.reset()
             self.ref_path = None
             rospy.loginfo(f'Goal reached — stopped ({dist_to_goal:.2f} m from target)')
             return
@@ -624,39 +597,34 @@ class AdaptMPPINode:
         delta = float(u[0])
         accel = float(u[1])
 
-        sw_deg = front2steer(math.degrees(delta))
+        delta_deg = math.degrees(delta)
 
-        self._v_cmd = max(
-            0.0,
-            min(self._v_cmd + accel * (1.0 / self.rate_hz), self.desired_speed),
-        )
-        now = stamp.to_sec()
-        speed_err = self._v_cmd - self.speed
-        if abs(speed_err) < 0.05:
-            speed_err = 0.0
-        pid_out = self.pid_speed.get_control(now, speed_err)
-        if pid_out >= 0.0:
-            self._accel_cmd_value = min(pid_out, self.max_throttle)
-            self._brake_cmd_value = 0.0
+        # MPPI's accel sign carries the intent: + means accelerate toward
+        # cruising speed, - means brake. The plugin already slews `speed`
+        # at `acceleration` m/s², so we just hand it a target and a rate —
+        # no software integration on _v_cmd (that was double-rate-limiting
+        # the response). `~min_accel` floors the slew so the plugin still
+        # moves when MPPI commands a near-zero accel at cruise.
+        if accel >= 0.0:
+            self._v_cmd = self.desired_speed
         else:
-            self._accel_cmd_value = 0.0
-            self._brake_cmd_value = min(abs(pid_out), self.max_brake)
+            self._v_cmd = 0.0
+        slew = max(abs(float(accel)), float(rospy.get_param('~min_accel', 1.0)))
 
         ackermann_msg = AckermannDrive()
         ackermann_msg.steering_angle = delta
         ackermann_msg.steering_angle_velocity = 0.0
         ackermann_msg.speed = self._v_cmd
-        ackermann_msg.acceleration = float(self._accel_cmd_value)
+        ackermann_msg.acceleration = slew
         self.ackermann_pub.publish(ackermann_msg)
 
         ess = self.mppi.effective_sample_count()
         rospy.loginfo_throttle(
             1.0,
             f'MPPI | pos=({x:.2f},{y:.2f}) yaw={math.degrees(yaw):.1f}deg '
-            f'v={self.speed:.2f}→{self._v_cmd:.2f} '
-            f'thr={self._accel_cmd_value:.2f} brk={self._brake_cmd_value:.2f} '
-            f'sw={sw_deg:.1f}deg obs={len(self.obstacles)} '
-            f'ESS/K={ess/self.mppi.K:.2f}',
+            f'v={self.speed:.2f}→{self._v_cmd:.2f} a={accel:+.2f} '
+            f'δ_raw={math.degrees(delta_raw):+.1f}° δ_cmd={delta_deg:+.1f}° '
+            f'obs={len(self.obstacles)} ESS/K={ess/self.mppi.K:.2f}',
         )
 
         self.viz.publish(self.mppi, self.obstacles, stamp, accel=accel, delta=delta)
@@ -669,6 +637,32 @@ def main():
     AdaptMPPINode()
     rospy.spin()
 
+
+class OnlineFilter:
+    """
+    Simple low-pass filter for scalar streams (e.g., noisy steering).
+    Implements a first-order IIR filter (exponential smoothing).
+    """
+    def __init__(self, cutoff: float, fs: float):
+        self.cutoff  = float(cutoff)
+        self.fs      = float(fs)
+
+        # First-order RC LPF discretised via backward Euler:
+        #   alpha = dt / (tau + dt),  tau = 1 / (2π f_c),  dt = 1 / fs.
+        # Both terms must be in seconds — the previous version compared
+        # `tau` (s) against `fs` (Hz) and produced alpha ≈ 6.6e-4, making
+        # the filter effectively zero gain.
+        tau = 1.0 / (2.0 * math.pi * max(self.cutoff, 1e-6))
+        dt  = 1.0 / max(self.fs, 1e-6)
+        self.alpha = dt / (tau + dt)
+
+        self._y_prev = 0.0
+
+    def get_data(self, x: float) -> float:
+        """Update filter state and return filtered value."""
+        y = self.alpha * float(x) + (1.0 - self.alpha) * self._y_prev
+        self._y_prev = y
+        return y
 
 if __name__ == '__main__':
     main()
