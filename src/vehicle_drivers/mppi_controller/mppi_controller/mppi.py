@@ -60,7 +60,6 @@ class MPPI:
         w_pos=15.0,          # goal position error weight
         w_vel=5.0,           # velocity tracking weight
         w_curv=2.0,          # stability: |δ|·v penalty
-        w_heading=0.0,       # |yaw - path_tangent| penalty for damping overshoot
         w_obs_hard=250.0,    # step penalty inside clearance radius
         w_obs_soft=40.0,     # exponential falloff outside clearance
         w_cone_hard=250.0,   # hard step inside cone exclusion radius
@@ -93,7 +92,6 @@ class MPPI:
         self.w_pos = float(w_pos)
         self.w_vel = float(w_vel)
         self.w_curv = float(w_curv)
-        self.w_heading = float(w_heading)
         self.w_obs = float(w_obs)
         self.w_obs_hard = float(w_obs_hard)
         self.w_obs_soft = float(w_obs_soft)
@@ -116,7 +114,6 @@ class MPPI:
                                   dtype=torch.float32, device=self.device)
         self._ego = torch.zeros(4, dtype=torch.float32, device=self.device)
         self._ref_xy = None    # (N, 2) tensor — reference path waypoints
-        self._ref_yaw = None   # (N,)   tensor — path tangent angle at each waypoint
 
         # Obstacle inputs — mutually exclusive: prefer _ped_traj when set.
         self._peds = None      # (M, 5) [x,y,vx,vy,conf] — legacy confidence-growth
@@ -181,30 +178,14 @@ class MPPI:
         t = len(self._traj_buffer) - 1
 
         # Position: minimum distance to any reference path waypoint (cross-track).
-        # Also pull the nearest-waypoint index so we can index its tangent
-        # for the heading-alignment penalty below.
         if self._ref_xy is not None:
-            d_kn = torch.cdist(state[:, :2], self._ref_xy)
-            pos_err, near_idx = d_kn.min(dim=1)
+            pos_err = torch.cdist(state[:, :2], self._ref_xy).min(dim=1).values
         else:
             pos_err = torch.zeros(state.shape[0], dtype=torch.float32,
                                   device=self.device)
-            near_idx = None
         vel_err = torch.abs(state[:, 3] - self.v_ref)
         stability = torch.abs(u[:, 1]) * state[:, 3]
         cost = self.w_pos * pos_err + self.w_vel * vel_err + self.w_curv * stability
-
-        # --- Heading alignment: penalise |yaw - path_tangent| at the nearest
-        # waypoint. Provides damping that pure cross-track cost lacks — a
-        # trajectory crossing the path with the wrong heading is now expensive,
-        # which kills the underdamped left/right overshoot.
-        if (self.w_heading > 0.0
-                and near_idx is not None
-                and self._ref_yaw is not None):
-            tan_yaw = self._ref_yaw[near_idx]                       # (K,)
-            yaw_err = state[:, 2] - tan_yaw
-            yaw_err = torch.atan2(torch.sin(yaw_err), torch.cos(yaw_err))
-            cost = cost + self.w_heading * torch.abs(yaw_err)
 
         # --- Temporal pedestrian risk (full diffusion trajectory) ---
         if self._ped_traj is not None:
@@ -304,18 +285,6 @@ class MPPI:
 
         ref_xy = np.asarray(reference_path.xy, dtype=np.float32)
         self._ref_xy = torch.as_tensor(ref_xy, dtype=torch.float32, device=self.device)
-
-        # Path-tangent angle at each waypoint (forward differences with edge
-        # repeats). Consumed by the heading-alignment cost — precomputed once
-        # per update() so the running_cost just does a gather.
-        if ref_xy.shape[0] >= 2:
-            d = np.diff(ref_xy, axis=0)                       # (N-1, 2)
-            d = np.vstack([d, d[-1:]])                        # (N, 2)
-            ref_yaw = np.arctan2(d[:, 1], d[:, 0])            # (N,)
-        else:
-            ref_yaw = np.zeros(ref_xy.shape[0], dtype=np.float32)
-        self._ref_yaw = torch.as_tensor(ref_yaw, dtype=torch.float32, device=self.device)
-
         # _goal used only by terminal cost (disabled by default); point to last waypoint.
         self._goal = torch.tensor(
             [float(ref_xy[-1, 0]), float(ref_xy[-1, 1]), 0.0, self.v_ref],
